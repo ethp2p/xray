@@ -1,5 +1,5 @@
 services:
-  introspector:
+  wiretap:
     build: .
     user: "${UID:-1000}:${GID:-1000}"
     ports:

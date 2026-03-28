@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
-	pb "github.com/ethp2p/instrument/pb"
+	pb "github.com/ethp2p/wiretap/proto"
 )
 
 func readTraceFile(t *testing.T, path string) []*pb.TraceEvent {

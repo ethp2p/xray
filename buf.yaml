@@ -2,4 +2,4 @@ version: v2
 modules:
   - path: .
     includes:
-      - pb
+      - proto

@@ -25,15 +25,15 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ethp2p/instrument"
-	"github.com/ethp2p/instrument/eth"
-	"github.com/ethp2p/instrument/introspector"
+	"github.com/ethp2p/wiretap/probe"
+	"github.com/ethp2p/wiretap/eth"
+	"github.com/ethp2p/wiretap/backend"
 )
 
 type liveMessage struct {
 	Type        string                    `json:"type"`
-	Slot        *introspector.SlotSummary `json:"slot"`
-	Slots       []introspector.SlotSummary `json:"slots"`
+	Slot        *backend.SlotSummary `json:"slot"`
+	Slots       []backend.SlotSummary `json:"slots"`
 	CurrentSlot uint64                    `json:"current_slot"`
 }
 
@@ -47,10 +47,10 @@ func TestIntrospectorUnixIngestHTTPAndWS(t *testing.T) {
 	require.NoError(t, err)
 	defer h1.Close()
 
-	ih, err := instrument.Wrap(
+	ih, err := probe.Wrap(
 		h1,
-		instrument.WithUnixSocket(fixture.socketPath),
-		instrument.WithWaitForAttach(),
+		probe.WithUnixSocket(fixture.socketPath),
+		probe.WithWaitForAttach(),
 	)
 	require.NoError(t, err)
 	defer ih.Close()
@@ -96,10 +96,10 @@ func TestMultiSourceIsolation(t *testing.T) {
 	base1, err := libp2p.New()
 	require.NoError(t, err)
 	defer base1.Close()
-	ih1, err := instrument.Wrap(base1,
-		instrument.WithUnixSocket(fixture.socketPath),
-		instrument.WithClientName("client-1"),
-		instrument.WithWaitForAttach(),
+	ih1, err := probe.Wrap(base1,
+		probe.WithUnixSocket(fixture.socketPath),
+		probe.WithClientName("client-1"),
+		probe.WithWaitForAttach(),
 	)
 	require.NoError(t, err)
 	defer ih1.Close()
@@ -107,10 +107,10 @@ func TestMultiSourceIsolation(t *testing.T) {
 	base2, err := libp2p.New()
 	require.NoError(t, err)
 	defer base2.Close()
-	ih2, err := instrument.Wrap(base2,
-		instrument.WithUnixSocket(fixture.socketPath),
-		instrument.WithClientName("client-2"),
-		instrument.WithWaitForAttach(),
+	ih2, err := probe.Wrap(base2,
+		probe.WithUnixSocket(fixture.socketPath),
+		probe.WithClientName("client-2"),
+		probe.WithWaitForAttach(),
 	)
 	require.NoError(t, err)
 	defer ih2.Close()
@@ -157,10 +157,10 @@ func TestPeersEndpoint(t *testing.T) {
 	base1, err := libp2p.New()
 	require.NoError(t, err)
 	defer base1.Close()
-	ih1, err := instrument.Wrap(base1,
-		instrument.WithUnixSocket(fixture.socketPath),
-		instrument.WithClientName("test-probe"),
-		instrument.WithWaitForAttach(),
+	ih1, err := probe.Wrap(base1,
+		probe.WithUnixSocket(fixture.socketPath),
+		probe.WithClientName("test-probe"),
+		probe.WithWaitForAttach(),
 	)
 	require.NoError(t, err)
 	defer ih1.Close()
@@ -219,10 +219,10 @@ func TestWebSocketSourceScoping(t *testing.T) {
 	base1, err := libp2p.New()
 	require.NoError(t, err)
 	defer base1.Close()
-	ih1, err := instrument.Wrap(base1,
-		instrument.WithUnixSocket(fixture.socketPath),
-		instrument.WithClientName("ws-test"),
-		instrument.WithWaitForAttach(),
+	ih1, err := probe.Wrap(base1,
+		probe.WithUnixSocket(fixture.socketPath),
+		probe.WithClientName("ws-test"),
+		probe.WithWaitForAttach(),
 	)
 	require.NoError(t, err)
 	defer ih1.Close()
@@ -293,10 +293,10 @@ func TestIntrospectorGossipSubPublishE2E(t *testing.T) {
 	require.NoError(t, err)
 	defer baseHost1.Close()
 
-	host1, err := instrument.Wrap(
+	host1, err := probe.Wrap(
 		baseHost1,
-		instrument.WithUnixSocket(fixture.socketPath),
-		instrument.WithWaitForAttach(),
+		probe.WithUnixSocket(fixture.socketPath),
+		probe.WithWaitForAttach(),
 	)
 	require.NoError(t, err)
 	defer host1.Close()
@@ -396,10 +396,10 @@ func TestSessionExclusivityOnReconnect(t *testing.T) {
 	base1, err := libp2p.New(libp2p.Identity(priv))
 	require.NoError(t, err)
 
-	ih1, err := instrument.Wrap(base1,
-		instrument.WithUnixSocket(fixture.socketPath),
-		instrument.WithClientName("probe-v1"),
-		instrument.WithWaitForAttach(),
+	ih1, err := probe.Wrap(base1,
+		probe.WithUnixSocket(fixture.socketPath),
+		probe.WithClientName("probe-v1"),
+		probe.WithWaitForAttach(),
 	)
 	require.NoError(t, err)
 
@@ -432,10 +432,10 @@ func TestSessionExclusivityOnReconnect(t *testing.T) {
 	base2, err := libp2p.New(libp2p.Identity(priv))
 	require.NoError(t, err)
 
-	ih2, err := instrument.Wrap(base2,
-		instrument.WithUnixSocket(fixture.socketPath),
-		instrument.WithClientName("probe-v2"),
-		instrument.WithWaitForAttach(),
+	ih2, err := probe.Wrap(base2,
+		probe.WithUnixSocket(fixture.socketPath),
+		probe.WithClientName("probe-v2"),
+		probe.WithWaitForAttach(),
 	)
 	require.NoError(t, err)
 	defer ih2.Close()
@@ -477,9 +477,9 @@ func startIntrospectorFixture(t *testing.T, ctx context.Context) introspectorFix
 	})
 
 	clock := eth.NewSlotClock(time.Unix(1606824023, 0), 12)
-	processor := introspector.NewProcessor(clock)
-	registry := introspector.NewSourceRegistry()
-	ingestListener := introspector.NewIngestListener(processor, registry, nil)
+	processor := backend.NewProcessor(clock)
+	registry := backend.NewSourceRegistry()
+	ingestListener := backend.NewIngestListener(processor, registry, nil)
 
 	ingestCtx, ingestCancel := context.WithCancel(ctx)
 	t.Cleanup(ingestCancel)
@@ -490,7 +490,7 @@ func startIntrospectorFixture(t *testing.T, ctx context.Context) introspectorFix
 	// Brief pause so the listener binds before the probe dials.
 	time.Sleep(50 * time.Millisecond)
 
-	server := introspector.NewServer(processor, registry, nil)
+	server := backend.NewServer(processor, registry, nil)
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	t.Cleanup(func() {
@@ -506,7 +506,7 @@ func startIntrospectorFixture(t *testing.T, ctx context.Context) introspectorFix
 	}
 }
 
-func fetchSlotSummaries(t *testing.T, baseURL string) []introspector.SlotSummary {
+func fetchSlotSummaries(t *testing.T, baseURL string) []backend.SlotSummary {
 	t.Helper()
 
 	resp, err := http.Get(baseURL + "/api/slots")
@@ -515,13 +515,13 @@ func fetchSlotSummaries(t *testing.T, baseURL string) []introspector.SlotSummary
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
 	var payload struct {
-		Slots []introspector.SlotSummary `json:"slots"`
+		Slots []backend.SlotSummary `json:"slots"`
 	}
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&payload))
 	return payload.Slots
 }
 
-func fetchSlotDetail(t *testing.T, baseURL string, slot uint64) (introspector.SlotDetail, int) {
+func fetchSlotDetail(t *testing.T, baseURL string, slot uint64) (backend.SlotDetail, int) {
 	t.Helper()
 
 	resp, err := http.Get(fmt.Sprintf("%s/api/slots/%d", baseURL, slot))
@@ -529,10 +529,10 @@ func fetchSlotDetail(t *testing.T, baseURL string, slot uint64) (introspector.Sl
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return introspector.SlotDetail{}, resp.StatusCode
+		return backend.SlotDetail{}, resp.StatusCode
 	}
 
-	var detail introspector.SlotDetail
+	var detail backend.SlotDetail
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&detail))
 	return detail, resp.StatusCode
 }

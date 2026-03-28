@@ -4,8 +4,8 @@ import (
 	"encoding/binary"
 	"testing"
 
-	"github.com/ethp2p/instrument"
-	gossipsub "github.com/ethp2p/instrument/libp2p/gossipsub"
+	"github.com/ethp2p/wiretap/probe"
+	gossipsub "github.com/ethp2p/wiretap/gossipsub"
 	"github.com/gogo/protobuf/proto"
 	pubsubpb "github.com/libp2p/go-libp2p-pubsub/pb"
 )
@@ -19,7 +19,7 @@ type emittedAction struct {
 func collectActions(frame []byte) ([]emittedAction, error) {
 	decoder := GossipSubDecoder().New()
 	var actions []emittedAction
-	err := decoder.ObserveRead(frame, func(bytes int, tags []instrument.Tag, _ any) {
+	err := decoder.ObserveRead(frame, func(bytes int, tags []probe.Tag, _ any) {
 		m := make(map[string][]string, len(tags))
 		for _, tag := range tags {
 			m[tag.Name] = append(m[tag.Name], tag.Values...)

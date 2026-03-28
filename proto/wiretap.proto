@@ -1,0 +1,114 @@
+syntax = "proto3";
+package wiretap.v1;
+
+option go_package = "github.com/ethp2p/wiretap/proto;wiretappb";
+
+// Top-level event wrapper
+message TraceEvent {
+  uint64 seq = 1;           // monotonic sequence number
+  int64 timestamp_ns = 2;   // unix nanos
+
+  oneof event {
+    Snapshot snapshot = 10;
+    StringDef string_def = 11;
+    ConnOpened conn_opened = 12;
+    ConnClosed conn_closed = 13;
+    StreamOpened stream_opened = 14;
+    StreamClosed stream_closed = 15;
+    Traffic traffic = 16;
+  }
+}
+
+// Full state snapshot for new consumers or file seeking
+message Snapshot {
+  repeated string strings = 1;       // string intern table (index = id)
+  repeated ConnInfo connections = 2;
+  repeated StreamInfo streams = 3;
+}
+
+// New interned string (emitted inline when first encountered)
+message StringDef {
+  uint32 id = 1;
+  string value = 2;
+}
+
+// Connection metadata
+message ConnInfo {
+  uint32 conn_id = 1;
+  bytes peer_id = 2;
+  string remote_addr = 3;      // multiaddr
+  Direction direction = 4;
+  string transport = 5;        // tcp, quic, etc.
+  string muxer = 6;            // yamux, mplex, etc.
+  string security = 7;         // tls, noise, etc.
+  int64 opened_at_ns = 8;
+}
+
+message ConnOpened {
+  ConnInfo info = 1;
+}
+
+message ConnClosed {
+  uint32 conn_id = 1;
+  int64 duration_ns = 2;
+}
+
+// Stream metadata
+message StreamInfo {
+  uint32 stream_id = 1;
+  uint32 conn_id = 2;
+  uint32 protocol_id = 3;      // interned string id
+  Direction direction = 4;
+  int64 opened_at_ns = 5;
+}
+
+message StreamOpened {
+  StreamInfo info = 1;
+}
+
+message StreamClosed {
+  uint32 stream_id = 1;
+}
+
+// Per-message traffic event
+message Traffic {
+  uint32 stream_id = 1;
+  Direction direction = 2;
+  uint32 bytes = 3;
+  repeated Tag tags = 4;
+}
+
+// Tag with interned strings
+message Tag {
+  uint32 name_id = 1;
+  repeated uint32 value_ids = 2;
+}
+
+enum Direction {
+  DIRECTION_UNKNOWN = 0;
+  DIRECTION_IN = 1;
+  DIRECTION_OUT = 2;
+}
+
+// gRPC service
+service WiretapService {
+  // Client sends handshake, server streams events
+  rpc StreamEvents(Handshake) returns (stream ServerMessage);
+}
+
+message Handshake {
+  uint64 resume_from_seq = 1;  // 0 = start fresh with snapshot
+}
+
+message ServerMessage {
+  oneof msg {
+    TraceEvent event = 1;
+    SlowWarning slow = 2;
+  }
+}
+
+// Signals client is consuming too slowly
+message SlowWarning {
+  uint64 buffered_events = 1;
+  uint64 dropped_events = 2;
+}

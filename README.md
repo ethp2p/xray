@@ -1,121 +1,195 @@
-# Ethereum Wiretap
+# Wiretap
 
-Transparent instrumentation for [go-libp2p](https://github.com/libp2p/go-libp2p) hosts, purpose-built for Ethereum consensus layer analysis. Wraps a `host.Host` to record connection lifecycle, stream activity, and per-protocol bandwidth with zero application code changes.
+Transparent libp2p network instrumentation with real-time analysis dashboard for Ethereum consensus layer research.
 
-Includes a real-time web dashboard with per-slot flow visualization, SSZ metadata extraction, and bleed-through detection.
+Wiretap wraps any `go-libp2p` host to capture stream-level traffic without modifying application code. A separate backend process decodes gossipsub messages, extracts SSZ slot numbers, and aggregates per-slot bandwidth breakdowns. A Solid.js dashboard renders the data in real time.
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Ethereum CL client                       │
+│                  (Prysm, Lighthouse, etc.)                    │
+│                                                               │
+│  ┌─────────────────────────────────────────────────────────┐ │
+│  │                    Probe (probe/)                        │ │
+│  │  Wraps go-libp2p Host, intercepts streams/connections    │ │
+│  │  Forwards raw bytes via ingest protocol                  │ │
+│  └──────────────────────┬──────────────────────────────────┘ │
+└─────────────────────────┼───────────────────────────────────┘
+                          │ Unix socket / TCP
+                          │ (ClientHello -> ServerHello -> Envelopes)
+                          v
+┌─────────────────────────────────────────────────────────────┐
+│                   Backend (cmd/wiretap)                       │
+│                                                               │
+│  ┌──────────┐  ┌───────────┐  ┌──────────┐  ┌────────────┐ │
+│  │ Ingest   │->│ Processor │->│ Storage  │  │ HTTP/WS    │ │
+│  │ listener │  │ (per-src) │  │ (files)  │  │ server     │ │
+│  └──────────┘  └───────────┘  └──────────┘  └─────┬──────┘ │
+│                                                     │        │
+│  gossipsub/ --- RPC parser                          │        │
+│  eth/ ────────- SSZ decoder, slot clock             │        │
+└─────────────────────────────────────────────────────┼───────┘
+                                                      │
+                                              ┌───────v───────┐
+                                              │   Dashboard    │
+                                              │  (Solid.js)    │
+                                              │  localhost:5173 │
+                                              └───────────────┘
+```
+
+The **probe** is a library that clients embed. It wraps the libp2p `Host`, intercepts every `Read`/`Write` on every stream, and forwards raw byte chunks over a lightweight ingest protocol to the backend. The probe has no Ethereum-specific logic; it sends opaque bytes.
+
+The **backend** is a standalone binary (`cmd/wiretap`). It accepts probe connections, reassembles gossipsub RPC frames, decodes SSZ payloads to extract slot numbers and block metadata, then aggregates traffic into 100ms time buckets per slot. It serves a REST + WebSocket API for the dashboard and persists finalized slots to disk.
+
+The **dashboard** is a Solid.js single-page app that connects to the backend over WebSocket for live slot updates and REST for historical data.
 
 ## Quick start
 
-```go
-h, _ := libp2p.New()
+### Run with Docker Compose
 
-slotClock := eth.NewSlotClock(time.Unix(1606824023, 0), 12) // mainnet genesis
-
-ih, err := instrument.Wrap(h,
-    instrument.WithDashboard(":9100"),
-    instrument.WithDecoder(eth.GossipSubDecoder()),
-)
-// ih implements host.Host; use it everywhere you'd use h
+```bash
+docker compose up --build
 ```
 
-Then open the dashboard:
+The backend listens on port 9100. Mount the probe's Unix socket directory as a volume (see `compose.yaml`).
+
+### Run locally
+
+Start the backend:
+
+```bash
+go build -o wiretap ./cmd/wiretap
+./wiretap --ingest=/tmp/wiretap.sock --listen=127.0.0.1:9100
+```
+
+Start the dashboard dev server:
 
 ```bash
 cd dashboard && bun install && bun run dev
 ```
 
-Navigate to `http://localhost:5173`. The Vite dev server proxies API requests to the introspector on port 9100.
+Open `http://localhost:5173`. Vite proxies API requests to the backend on `:9100`.
 
-## Architecture
+### Integrate with Prysm
 
-```
-libp2p host
-  └─ instrument.Wrap()
-       ├─ hot path: byte counting per stream (zero alloc)
-       └─ async decode pipeline (off hot path)
-            └─ gossipsub RPC parser
-                 └─ SSZ metadata extractor (Fulu spec)
-                      └─ introspector (per-slot aggregation)
-                           ├─ REST API (/api/slots, /api/slots/:id)
-                           └─ WebSocket (/api/ws, batched updates)
+```go
+import "github.com/ethp2p/wiretap/probe"
+
+ih, err := probe.Wrap(h,
+    probe.WithIngestAddr("/tmp/wiretap.sock"),
+    probe.WithClientName("prysm"),
+    probe.WithWaitForAttach(),
+)
 ```
 
-Each stream read/write records byte counts immediately. Protocol-specific decoding happens asynchronously on a separate goroutine per stream, so instrumentation never blocks the application.
+Prysm's fork supports this via `--instrument-socket` and `--instrument-file` flags.
 
-## Introspector
+## Project structure
 
-Aggregates per-slot bandwidth with 100ms bucket resolution:
+```
+probe/                  Library clients import (host wrapper, sinks, emitter)
+eth/                    Ethereum: slot clock, SSZ extraction, gossipsub decoder
+gossipsub/              Gossipsub RPC parser (varint framing, action atomization)
+backend/                Per-slot aggregation, REST/WS API, processor, storage
+wire/                   Ingest protocol codec (typed length-delimited framing)
+proto/                  Protobuf definitions and generated code
+  ingest/               Ingest protocol messages (Envelope, ClientHello, etc.)
+cmd/wiretap/            Backend binary entrypoint
+itest/                  Integration tests (gossipsub decoding, introspector E2E)
+dashboard/              Solid.js web dashboard
+docs/                   Specs and plans
+```
 
-- **Breakdown dimensions**: protocol, topic, message kind
-- **Message counts**: per breakdown entry (not just bytes)
-- **SSZ metadata** (zero-copy offset reads, Fulu consensus-spec):
-  - `beacon_block`: proposer index, attestation count, blob KZG commitments, transaction count
-  - `blob_sidecar`, `data_column_sidecar`: sidecar index
-- **Bleed-through detection**: compares payload slot (from SSZ) against observed slot, bucketed by distance (1, 2, 3, 4+ slots)
-- **Decode cache**: FNV-64a content hash avoids repeated Snappy decompression of the same payload from multiple peers
-- **Server-side batching**: WebSocket updates collected for 100ms before flushing as a single `slot_batch` message
+## Probe integration
 
-### API
+The probe wraps a `go-libp2p` host transparently:
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/slots` | GET | List slot summaries (newest first, up to 256) |
-| `/api/slots/:id` | GET | Slot detail with 100ms buckets and breakdown |
-| `/api/ws` | WS | Real-time slot updates (`slot_update`, `slot_batch`) |
+```go
+import "github.com/ethp2p/wiretap/probe"
 
-## Dashboard
+host, _ := libp2p.New(...)
+ih, err := probe.Wrap(host,
+    probe.WithIngestAddr("/tmp/wiretap.sock"),
+    probe.WithClientName("my-client/v1.0"),
+    probe.WithWaitForAttach(),                    // block until backend connects
+    probe.WithSinkFile("/var/log/wiretap.trace"), // optional local trace file
+    probe.WithDecoder(gossipsub.Decoder{}.Match, gossipsub.Decoder{}.New),
+    probe.WithOnMessage(func(streamID uint32, protocol string) probe.OnMessage {
+        return func(msg probe.DecodedMessage) {
+            // handle decoded messages off the hot path
+        }
+    }),
+)
+defer ih.Close()
+```
 
-Solid.js single-page app. All UI in a single `App.tsx` (~1800 lines).
+`probe.Wrap` returns a `*probe.Host` that satisfies `host.Host`. Existing code works unchanged; all stream reads/writes are intercepted and forwarded.
 
-### Slot list (left panel)
+## Configuration
 
-Each slot row is a 2x2 CSS grid:
+Backend CLI flags (`cmd/wiretap`):
 
-| Slot number | `in` ████████████ `out` |
-|-------------|-------------------------|
-| Total KiB | `tx` 142 `blob` 6 `att` 128 `v12345` |
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--ingest` | `/tmp/wiretap.sock` | Ingest listener address (Unix path or host:port) |
+| `--listen` | `127.0.0.1:9100` | HTTP listen address for REST/WS API |
+| `--data-dir` | `~/.wiretap/data` | Persistence directory for slot data |
+| `--retention-days` | `30` | Slot retention period in days |
+| `--genesis-unix` | `1606824023` | Beacon chain genesis Unix timestamp |
+| `--seconds-per-slot` | `12` | Beacon chain seconds per slot |
+| `--static-dir` | (none) | Serve dashboard static files from this directory |
 
-Metadata chips show SSZ-extracted values. The newest slot's total KiB pulses to indicate active traffic. Bandwidth bars use tinted greys (cool for received, warm for sent).
+## API
 
-### Diverging area chart (right panel, top)
+### REST endpoints
 
-SVG streamgraph with flows (topics) as layers. Received traffic stacks upward from the zero axis, sent traffic stacks downward. 500ms time grid with second markers.
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/slots?source=X&limit=N&search=Q` | List slot summaries (live + persisted) |
+| GET | `/api/slots/:slot?source=X` | Slot detail with time buckets and breakdown |
+| GET | `/api/sources` | List connected probe sources |
+| GET | `/api/peers?source=X` | List peers with connection metadata |
+| GET | `/api/search?source=X&from_slot=A&to_slot=B&limit=N` | Search persisted slots by range |
 
-Flows ordered by slot lifecycle: block, blob, attestation, aggregate, sync committee, exits, slashings. Vertical legend on the right. Hover brings the selected flow to the top z-order.
+### WebSocket
 
-Topic grouping collapses indexed subnets: `beacon_attestation_0..63` into `attestation`, `blob_sidecar_0..5` into `blob_sidecar`, `data_column_sidecar_0..127` into `data_column_sidecar`.
+Connect to `/api/ws?source=X`. The server sends:
 
-**Bleed-through overlay**: Hatched diagonal pattern on the outer edge of each flow's area, indicating traffic from previous slots. When hovered, tints from pink (1 slot) to deep red (4+ slots).
+- `snapshot` on connect (with `current_slot`)
+- `slot_batch` every 100ms with updated slot summaries and current slot
 
-**Tooltips**: Follow cursor, show total (slot aggregate) and spot (time point) traffic. Bleed sections include distance histograms with colored proportion bars.
+## Persistence
 
-### Breakdown tables (right panel, bottom)
+Finalized slots are written to disk under `<data-dir>/<source_id>/`:
 
-**Flow table**: Per-flow rows with columns:
-- NAME (with expand chevron and color dot)
-- DOMAIN (GSUB or RPC chip)
-- DATA (received/sent KiB)
-- CONTROL (IHAVE, IWANT, GRAFT, PRUNE, IDONTWANT; dynamic columns)
-- BLEED (received/sent KiB, red-tinted column)
+```
+<source_id>/
+  source.json                 Source metadata (peer ID, client name)
+  slots/<slot>.json           Full slot detail (summary + buckets + breakdown)
+  index/<epoch>.jsonl         One SlotSummary JSON per line, append-only
+```
 
-Expandable: grouped flows (e.g., `attestation`) expand to show individual subnet topics.
+Retention pruning runs daily, removing slot files and epoch indices older than `--retention-days`.
 
-**Protocol overhead table**: Gossipsub framing bytes and topic-less control traffic (IWANT, IDONTWANT). Subtle grey background to distinguish from the flow table.
-
-### Interaction
-
-- **Bidirectional hover**: chart layers highlight table rows and vice versa
-- **SIM/LIVE toggle** (`m`): mock data for development, live WebSocket for production
-- **Keyboard**: `j`/`k` slot navigation, `m` mode, `t` theme, `Cmd+K` command palette
-
-### Stack
-
-Solid.js, TypeScript (strict), Iosevka mono, SVG, Vite
-
-## Running tests
+## Development
 
 ```bash
-go test ./...
+# Build everything
+go build ./...
+
+# Run all tests (unit + integration)
+go test ./... -timeout 120s
+
+# Dashboard dev server (hot reload)
+cd dashboard && bun install && bun run dev
+
+# Dashboard production build
+cd dashboard && bun run build
+
+# Regenerate protobuf (requires buf, protoc-gen-go, protoc-gen-connect-go)
+buf generate
 ```
 
 ## License

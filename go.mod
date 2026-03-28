@@ -1,19 +1,18 @@
-module github.com/ethp2p/instrument
+module github.com/ethp2p/wiretap
 
 go 1.25.1
 
 require (
 	connectrpc.com/connect v1.19.1
-	connectrpc.com/cors v0.1.0
+	github.com/ferranbt/fastssz v1.0.0
 	github.com/gogo/protobuf v1.3.2
+	github.com/golang/snappy v1.0.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/libp2p/go-libp2p v0.39.1
 	github.com/libp2p/go-libp2p-pubsub v0.14.2
 	github.com/libp2p/go-msgio v0.3.0
 	github.com/multiformats/go-multiaddr v0.14.0
-	github.com/rs/cors v1.11.1
 	github.com/stretchr/testify v1.11.1
-	golang.org/x/net v0.43.0
 	google.golang.org/protobuf v1.36.9
 )
 
@@ -29,12 +28,10 @@ require (
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/elastic/gosigar v0.14.3 // indirect
 	github.com/emicklei/dot v1.6.2 // indirect
-	github.com/ferranbt/fastssz v1.0.0 // indirect
 	github.com/flynn/noise v1.1.0 // indirect
 	github.com/francoispqt/gojay v1.2.13 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
-	github.com/golang/snappy v1.0.0 // indirect
 	github.com/google/gopacket v1.1.19 // indirect
 	github.com/google/pprof v0.0.0-20250202011525-fc3143867406 // indirect
 	github.com/google/uuid v1.6.0 // indirect
@@ -117,6 +114,7 @@ require (
 	golang.org/x/crypto v0.41.0 // indirect
 	golang.org/x/exp v0.0.0-20250606033433-dcc06ee1d476 // indirect
 	golang.org/x/mod v0.27.0 // indirect
+	golang.org/x/net v0.43.0 // indirect
 	golang.org/x/sync v0.16.0 // indirect
 	golang.org/x/sys v0.35.0 // indirect
 	golang.org/x/text v0.28.0 // indirect

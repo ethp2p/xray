@@ -5,13 +5,14 @@ Go instrumentation library for libp2p with a Solid.js real-time dashboard for Et
 ## Project structure
 
 ```
-├── *.go                    # Core instrument package (host wrapper, sinks, emitter)
+├── probe/                  # Library clients import (host wrapper, sinks, emitter)
 ├── eth/                    # Ethereum-specific: gossipsub decoder, SSZ extraction, slot clock
-├── introspector/           # Per-slot aggregation, REST/WS API, processor
-├── libp2p/gossipsub/       # Gossipsub RPC parser (varint framing, action atomization)
-├── serve/                  # WebSocket and gRPC endpoints
-├── pb/                     # Protobuf definitions and generated code
-├── cmd/introspector/       # Introspector binary entrypoint
+├── gossipsub/              # Gossipsub RPC parser (varint framing, action atomization)
+├── backend/                # Per-slot aggregation, REST/WS API, processor
+├── wire/                   # Shared protocol codec (ingest framing)
+├── proto/                  # Protobuf definitions and generated code
+│   └── ingest/
+├── cmd/wiretap/            # Backend binary entrypoint
 ├── itest/                  # Integration tests
 └── dashboard/              # Solid.js web dashboard
     ├── src/App.tsx          # Entire UI (~1800 lines, single file)
@@ -32,7 +33,7 @@ cd dashboard && bun install && bun run dev   # dev server on :5173
 cd dashboard && bun run build                # production build
 ```
 
-Vite proxies `/api/*` and `/ws` to `localhost:9100` (the introspector).
+Vite proxies `/api/*` and `/ws` to `localhost:9100` (the backend).
 
 ## Dashboard architecture
 
@@ -107,9 +108,9 @@ Toggle with `m` key or command palette.
 
 ## Go backend
 
-### Introspector
+### Processor
 
-`introspector/processor.go` aggregates traffic by slot with 100ms buckets. Each `BucketBreakdown` has `protocol`, `topic`, `message_kind`, `bytes_in`, `bytes_out`, `msg_count`, `bleed_bytes_in`, `bleed_bytes_out`, `bleed_by_distance`.
+`backend/processor.go` aggregates traffic by slot with 100ms buckets. Each `BucketBreakdown` has `protocol`, `topic`, `message_kind`, `bytes_in`, `bytes_out`, `msg_count`, `bleed_bytes_in`, `bleed_bytes_out`, `bleed_by_distance`.
 
 Bleed detection: compares `eth.payload.slot` (from SSZ) against the observed slot. Distance bucketed as "1", "2", "3", "4+".
 
@@ -123,7 +124,7 @@ Zero-copy offset reads from Snappy-decompressed gossipsub payloads. Offsets veri
 
 Content-addressed decode cache (FNV-64a hash, 256 entries) avoids re-decompressing the same payload from multiple peers.
 
-### WebSocket batching (`introspector/server.go`)
+### WebSocket batching (`backend/server.go`)
 
 Server collects slot updates for 100ms via `time.AfterFunc`, then sends one `slot_batch` message. Snapshot written before client registration to prevent concurrent WebSocket writes (gorilla/websocket requires single-writer).
 

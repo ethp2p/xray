@@ -4,7 +4,7 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -o /introspector ./cmd/introspector
+RUN CGO_ENABLED=0 go build -o /wiretap ./cmd/wiretap
 
 # ── Dashboard ────────────────────────────────────────────────────────
 FROM oven/bun:1 AS dashboard
@@ -16,10 +16,10 @@ RUN bun run build
 
 # ── Final image ──────────────────────────────────────────────────────
 FROM gcr.io/distroless/static-debian12
-COPY --from=backend /introspector /usr/local/bin/introspector
+COPY --from=backend /wiretap /usr/local/bin/wiretap
 COPY --from=dashboard /src/dist /srv/dashboard
 EXPOSE 9100
-ENTRYPOINT ["introspector"]
+ENTRYPOINT ["wiretap"]
 CMD [ \
   "--ingest", "/tmp/wiretap.sock", \
   "--listen", "0.0.0.0:9100", \

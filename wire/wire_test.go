@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	ingestpb "github.com/ethp2p/instrument/pb/ingest"
+	ingestpb "github.com/ethp2p/wiretap/proto/ingest"
 )
 
 func TestRoundTripClientHello(t *testing.T) {
