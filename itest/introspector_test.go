@@ -19,6 +19,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/libp2p/go-libp2p"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
@@ -344,10 +345,6 @@ func TestIntrospectorGossipSubPublishE2E(t *testing.T) {
 				t,
 				fixture.baseURL,
 				row.Slot,
-				map[string]string{
-					"topic":        "beacon_block",
-					"message_kind": "PUBLISH",
-				},
 			)
 			if statusCode != http.StatusOK {
 				continue
@@ -369,10 +366,6 @@ func TestIntrospectorGossipSubPublishE2E(t *testing.T) {
 		t,
 		fixture.baseURL,
 		targetSlot,
-		map[string]string{
-			"topic":        "beacon_block",
-			"message_kind": "PUBLISH",
-		},
 	)
 	require.Equal(t, http.StatusOK, statusCode)
 	require.NotEmpty(t, detail.Breakdown)
@@ -388,6 +381,86 @@ func TestIntrospectorGossipSubPublishE2E(t *testing.T) {
 		}
 	}
 	require.True(t, found, "expected decoded gossipsub publish breakdown row")
+}
+
+func TestSessionExclusivityOnReconnect(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	fixture := startIntrospectorFixture(t, ctx)
+
+	// Generate a fixed key so both hosts share the same peer_id (and thus source_id).
+	priv, _, err := crypto.GenerateEd25519Key(nil)
+	require.NoError(t, err)
+
+	base1, err := libp2p.New(libp2p.Identity(priv))
+	require.NoError(t, err)
+
+	ih1, err := instrument.Wrap(base1,
+		instrument.WithUnixSocket(fixture.socketPath),
+		instrument.WithClientName("probe-v1"),
+		instrument.WithWaitForAttach(),
+	)
+	require.NoError(t, err)
+
+	var sourceID string
+	require.Eventually(t, func() bool {
+		resp, err := http.Get(fixture.baseURL + "/api/sources")
+		if err != nil {
+			return false
+		}
+		defer resp.Body.Close()
+		var payload struct {
+			Sources []struct {
+				SourceID   string `json:"source_id"`
+				ClientName string `json:"client_name"`
+			} `json:"sources"`
+		}
+		json.NewDecoder(resp.Body).Decode(&payload)
+		if len(payload.Sources) > 0 {
+			sourceID = payload.Sources[0].SourceID
+			return true
+		}
+		return false
+	}, 5*time.Second, 200*time.Millisecond)
+
+	// Close the first instrumented host (also closes base1).
+	ih1.Close()
+	time.Sleep(500 * time.Millisecond)
+
+	// Create a new host with the same identity so peer_id matches.
+	base2, err := libp2p.New(libp2p.Identity(priv))
+	require.NoError(t, err)
+
+	ih2, err := instrument.Wrap(base2,
+		instrument.WithUnixSocket(fixture.socketPath),
+		instrument.WithClientName("probe-v2"),
+		instrument.WithWaitForAttach(),
+	)
+	require.NoError(t, err)
+	defer ih2.Close()
+
+	// The source should still have the same source_id but updated client_name.
+	require.Eventually(t, func() bool {
+		resp, err := http.Get(fixture.baseURL + "/api/sources")
+		if err != nil {
+			return false
+		}
+		defer resp.Body.Close()
+		var payload struct {
+			Sources []struct {
+				SourceID   string `json:"source_id"`
+				ClientName string `json:"client_name"`
+			} `json:"sources"`
+		}
+		json.NewDecoder(resp.Body).Decode(&payload)
+		for _, s := range payload.Sources {
+			if s.SourceID == sourceID && s.ClientName == "probe-v2" {
+				return true
+			}
+		}
+		return false
+	}, 5*time.Second, 200*time.Millisecond, "expected source to be updated with probe-v2 client name")
 }
 
 type introspectorFixture struct {
@@ -448,18 +521,10 @@ func fetchSlotSummaries(t *testing.T, baseURL string) []introspector.SlotSummary
 	return payload.Slots
 }
 
-func fetchSlotDetail(t *testing.T, baseURL string, slot uint64, filters map[string]string) (introspector.SlotDetail, int) {
+func fetchSlotDetail(t *testing.T, baseURL string, slot uint64) (introspector.SlotDetail, int) {
 	t.Helper()
 
-	u, err := url.Parse(fmt.Sprintf("%s/api/slots/%d", baseURL, slot))
-	require.NoError(t, err)
-	query := u.Query()
-	for key, value := range filters {
-		query.Set(key, value)
-	}
-	u.RawQuery = query.Encode()
-
-	resp, err := http.Get(u.String())
+	resp, err := http.Get(fmt.Sprintf("%s/api/slots/%d", baseURL, slot))
 	require.NoError(t, err)
 	defer resp.Body.Close()
 

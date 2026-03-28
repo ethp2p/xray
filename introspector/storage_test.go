@@ -164,6 +164,26 @@ func TestStorageSearchSlots(t *testing.T) {
 	}
 }
 
+func TestStorageWriteThenSearch(t *testing.T) {
+	s, err := NewStorage(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	detail := SlotDetail{
+		Summary: SlotSummary{Slot: 100, Epoch: 3, BytesIn: 500, BytesOut: 300},
+	}
+	if err := s.WriteSlot("src1", detail); err != nil {
+		t.Fatal(err)
+	}
+	results := s.SearchSlots("src1", 99, 101, 10)
+	if len(results) != 1 {
+		t.Fatalf("expected 1 search result, got %d", len(results))
+	}
+	if results[0].Slot != 100 {
+		t.Fatalf("expected slot 100, got %d", results[0].Slot)
+	}
+}
+
 func TestStoragePrune(t *testing.T) {
 	s, err := NewStorage(t.TempDir())
 	if err != nil {

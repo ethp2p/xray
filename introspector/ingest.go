@@ -73,7 +73,7 @@ func (l *IngestListener) ListenAndServe(ctx context.Context, address string) err
 }
 
 func (l *IngestListener) handleConnection(conn net.Conn) {
-	hello, err := ReadClientHello(conn)
+	hello, err := wire.ReadClientHello(conn)
 	if err != nil {
 		conn.Close()
 		return
@@ -106,7 +106,7 @@ func (l *IngestListener) handleConnection(conn net.Conn) {
 		cancel()
 	}()
 
-	err = WriteServerHello(conn, &ingestpb.ServerHello{
+	err = wire.WriteServerHello(conn, &ingestpb.ServerHello{
 		ProtocolVersion: wire.IngestProtocolVersion,
 		SourceId:        sourceID,
 	})
@@ -138,7 +138,7 @@ func (l *IngestListener) handleConnection(conn net.Conn) {
 			return
 		default:
 		}
-		env, err := ReadEnvelope(conn)
+		env, err := wire.ReadEnvelope(conn)
 		if err != nil {
 			return
 		}

@@ -2,6 +2,7 @@ package introspector
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"net"
 	"net/http"
@@ -65,16 +66,14 @@ func (s *Server) Serve(l net.Listener) error {
 	return http.Serve(l, s.Handler())
 }
 
-func (s *Server) resolveSourceID(r *http.Request) string {
+func (s *Server) resolveSourceID(r *http.Request) (string, error) {
 	if id := r.URL.Query().Get("source"); id != "" {
-		return id
+		return id, nil
 	}
 	if s.registry != nil {
-		if id, err := s.registry.DefaultSourceID(); err == nil {
-			return id
-		}
+		return s.registry.DefaultSourceID()
 	}
-	return ""
+	return "", errors.New("no sources available")
 }
 
 func (s *Server) handleSlots(w http.ResponseWriter, r *http.Request) {
@@ -85,7 +84,11 @@ func (s *Server) handleSlots(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	sourceID := s.resolveSourceID(r)
+	sourceID, err := s.resolveSourceID(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	live := s.processor.ListSlots(sourceID, r.URL.Query().Get("search"), limit)
 
 	if s.storage == nil {
@@ -120,7 +123,11 @@ func (s *Server) handleSlotDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sourceID := s.resolveSourceID(r)
+	sourceID, err := s.resolveSourceID(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	detail, ok := s.processor.SlotDetail(sourceID, slot)
 	if !ok && s.storage != nil {
 		raw, err := s.storage.ReadSlot(sourceID, slot)
@@ -144,18 +151,18 @@ func (s *Server) handleSources(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePeers(w http.ResponseWriter, r *http.Request) {
-	sourceID := s.resolveSourceID(r)
-	if sourceID == "" {
-		http.Error(w, "source required", http.StatusBadRequest)
+	sourceID, err := s.resolveSourceID(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	writeJSON(w, map[string]any{"peers": s.processor.ListPeers(sourceID)})
 }
 
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
-	sourceID := s.resolveSourceID(r)
-	if sourceID == "" {
-		http.Error(w, "source required", http.StatusBadRequest)
+	sourceID, err := s.resolveSourceID(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	q := r.URL.Query()
@@ -184,13 +191,17 @@ var wsUpgrader = websocket.Upgrader{
 }
 
 func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
+	sourceID, err := s.resolveSourceID(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	conn, err := wsUpgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("ws upgrade failed: %v", err)
 		return
 	}
-
-	sourceID := s.resolveSourceID(r)
 
 	// Write snapshot before registering so flushPendingUpdates cannot
 	// race on this conn (gorilla/websocket forbids concurrent writers).
