@@ -1,6 +1,6 @@
 :root {
   --b: 'IBM Plex Sans', system-ui, sans-serif;
-  --m: 'Iosevka', monospace;
+  --m: 'Xray Mono', monospace;
 
   /* Type scale: 4 tiers with clear separation */
   --t-xs: 0.625rem;   /* 10px — axis ticks, tertiary labels */
