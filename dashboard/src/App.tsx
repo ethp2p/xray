@@ -1142,6 +1142,9 @@ type ViewId = "slots" | "peers";
 type DataMode = "sim" | "live";
 type WsStatus = "connecting" | "connected" | "reconnecting" | "disconnected";
 
+const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.platform);
+const modKey = isMac ? "Cmd" : "Ctrl";
+
 export default function App() {
   const [tick, setTick] = createSignal(0);
   const [live, setLive] = createSignal(true);
@@ -1466,7 +1469,7 @@ export default function App() {
           S<span style={{ color: "var(--fg)" }}>{sel()}</span>
         </span>
         <span style={{ "font-family": "var(--m)", "font-size": "var(--t-md)", color: "var(--3)" }}>
-          {(selData().total / 1024).toFixed(1)}<span style={{ "font-size": "var(--t-xs)" }}>KB</span>
+          {(selData().total / 1024).toFixed(1)}<span style={{ "font-size": "var(--t-xs)" }}>KiB</span>
         </span>
         <span style={{ color: "var(--2)" }}>|</span>
 
@@ -1483,7 +1486,7 @@ export default function App() {
           <Kbd>t</Kbd>
         </button>
 
-        <button onClick={() => setCmdOpen(true)} aria-label="Open command palette" style={{ cursor: "pointer", opacity: 0.5, background: "none", border: "none", padding: 0 }}><Kbd>Cmd+K</Kbd></button>
+        <button onClick={() => setCmdOpen(true)} aria-label="Open command palette" style={{ cursor: "pointer", opacity: 0.5, background: "none", border: "none", padding: 0 }}><Kbd>{modKey}+K</Kbd></button>
       </div>
 
       {/* ── Body ─────────────────────────────────────── */}
