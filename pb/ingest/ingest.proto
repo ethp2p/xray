@@ -8,8 +8,9 @@ message Envelope {
   uint64 seq = 1;
   int64 observed_at_ns = 2;
 
+  reserved 10; // was server_hello; use ClientHello/ServerHello as standalone framing
+
   oneof payload {
-    ServerHello server_hello = 10;
     SnapshotStart snapshot_start = 11;
     SnapshotEnd snapshot_end = 12;
 
@@ -23,13 +24,17 @@ message Envelope {
   }
 }
 
+message ClientHello {
+  uint32 protocol_version = 1;
+  bytes peer_id = 2;            // libp2p peer ID of the instrumented node
+  string client_name = 3;       // e.g. "prysm/v5.2.0", "lighthouse/v5.3.0"
+  bytes boot_id = 4;            // changes each process restart
+  int64 started_at_ns = 5;      // probe process start time
+}
+
 message ServerHello {
   uint32 protocol_version = 1;
-  string source_id = 2;
-  bytes boot_id = 3;
-  bytes local_peer_id = 4;
-  int64 started_at_ns = 5;
-  bool wait_for_attach = 6;
+  string source_id = 2;         // backend-assigned, stable across reconnects
 }
 
 message SnapshotStart {}

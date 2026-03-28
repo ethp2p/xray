@@ -128,7 +128,6 @@ type Envelope struct {
 	ObservedAtNs int64                  `protobuf:"varint,2,opt,name=observed_at_ns,json=observedAtNs,proto3" json:"observed_at_ns,omitempty"`
 	// Types that are valid to be assigned to Payload:
 	//
-	//	*Envelope_ServerHello
 	//	*Envelope_SnapshotStart
 	//	*Envelope_SnapshotEnd
 	//	*Envelope_StringDef
@@ -190,15 +189,6 @@ func (x *Envelope) GetObservedAtNs() int64 {
 func (x *Envelope) GetPayload() isEnvelope_Payload {
 	if x != nil {
 		return x.Payload
-	}
-	return nil
-}
-
-func (x *Envelope) GetServerHello() *ServerHello {
-	if x != nil {
-		if x, ok := x.Payload.(*Envelope_ServerHello); ok {
-			return x.ServerHello
-		}
 	}
 	return nil
 }
@@ -288,10 +278,6 @@ type isEnvelope_Payload interface {
 	isEnvelope_Payload()
 }
 
-type Envelope_ServerHello struct {
-	ServerHello *ServerHello `protobuf:"bytes,10,opt,name=server_hello,json=serverHello,proto3,oneof"`
-}
-
 type Envelope_SnapshotStart struct {
 	SnapshotStart *SnapshotStart `protobuf:"bytes,11,opt,name=snapshot_start,json=snapshotStart,proto3,oneof"`
 }
@@ -328,8 +314,6 @@ type Envelope_StreamChunk struct {
 	StreamChunk *StreamChunk `protobuf:"bytes,26,opt,name=stream_chunk,json=streamChunk,proto3,oneof"`
 }
 
-func (*Envelope_ServerHello) isEnvelope_Payload() {}
-
 func (*Envelope_SnapshotStart) isEnvelope_Payload() {}
 
 func (*Envelope_SnapshotEnd) isEnvelope_Payload() {}
@@ -348,21 +332,93 @@ func (*Envelope_StreamClosed) isEnvelope_Payload() {}
 
 func (*Envelope_StreamChunk) isEnvelope_Payload() {}
 
+type ClientHello struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	ProtocolVersion uint32                 `protobuf:"varint,1,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
+	PeerId          []byte                 `protobuf:"bytes,2,opt,name=peer_id,json=peerId,proto3" json:"peer_id,omitempty"`                   // libp2p peer ID of the instrumented node
+	ClientName      string                 `protobuf:"bytes,3,opt,name=client_name,json=clientName,proto3" json:"client_name,omitempty"`       // e.g. "prysm/v5.2.0", "lighthouse/v5.3.0"
+	BootId          []byte                 `protobuf:"bytes,4,opt,name=boot_id,json=bootId,proto3" json:"boot_id,omitempty"`                   // changes each process restart
+	StartedAtNs     int64                  `protobuf:"varint,5,opt,name=started_at_ns,json=startedAtNs,proto3" json:"started_at_ns,omitempty"` // probe process start time
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *ClientHello) Reset() {
+	*x = ClientHello{}
+	mi := &file_pb_ingest_ingest_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClientHello) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClientHello) ProtoMessage() {}
+
+func (x *ClientHello) ProtoReflect() protoreflect.Message {
+	mi := &file_pb_ingest_ingest_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClientHello.ProtoReflect.Descriptor instead.
+func (*ClientHello) Descriptor() ([]byte, []int) {
+	return file_pb_ingest_ingest_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *ClientHello) GetProtocolVersion() uint32 {
+	if x != nil {
+		return x.ProtocolVersion
+	}
+	return 0
+}
+
+func (x *ClientHello) GetPeerId() []byte {
+	if x != nil {
+		return x.PeerId
+	}
+	return nil
+}
+
+func (x *ClientHello) GetClientName() string {
+	if x != nil {
+		return x.ClientName
+	}
+	return ""
+}
+
+func (x *ClientHello) GetBootId() []byte {
+	if x != nil {
+		return x.BootId
+	}
+	return nil
+}
+
+func (x *ClientHello) GetStartedAtNs() int64 {
+	if x != nil {
+		return x.StartedAtNs
+	}
+	return 0
+}
+
 type ServerHello struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	ProtocolVersion uint32                 `protobuf:"varint,1,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
-	SourceId        string                 `protobuf:"bytes,2,opt,name=source_id,json=sourceId,proto3" json:"source_id,omitempty"`
-	BootId          []byte                 `protobuf:"bytes,3,opt,name=boot_id,json=bootId,proto3" json:"boot_id,omitempty"`
-	LocalPeerId     []byte                 `protobuf:"bytes,4,opt,name=local_peer_id,json=localPeerId,proto3" json:"local_peer_id,omitempty"`
-	StartedAtNs     int64                  `protobuf:"varint,5,opt,name=started_at_ns,json=startedAtNs,proto3" json:"started_at_ns,omitempty"`
-	WaitForAttach   bool                   `protobuf:"varint,6,opt,name=wait_for_attach,json=waitForAttach,proto3" json:"wait_for_attach,omitempty"`
+	SourceId        string                 `protobuf:"bytes,2,opt,name=source_id,json=sourceId,proto3" json:"source_id,omitempty"` // backend-assigned, stable across reconnects
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ServerHello) Reset() {
 	*x = ServerHello{}
-	mi := &file_pb_ingest_ingest_proto_msgTypes[1]
+	mi := &file_pb_ingest_ingest_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -374,7 +430,7 @@ func (x *ServerHello) String() string {
 func (*ServerHello) ProtoMessage() {}
 
 func (x *ServerHello) ProtoReflect() protoreflect.Message {
-	mi := &file_pb_ingest_ingest_proto_msgTypes[1]
+	mi := &file_pb_ingest_ingest_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -387,7 +443,7 @@ func (x *ServerHello) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServerHello.ProtoReflect.Descriptor instead.
 func (*ServerHello) Descriptor() ([]byte, []int) {
-	return file_pb_ingest_ingest_proto_rawDescGZIP(), []int{1}
+	return file_pb_ingest_ingest_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ServerHello) GetProtocolVersion() uint32 {
@@ -404,34 +460,6 @@ func (x *ServerHello) GetSourceId() string {
 	return ""
 }
 
-func (x *ServerHello) GetBootId() []byte {
-	if x != nil {
-		return x.BootId
-	}
-	return nil
-}
-
-func (x *ServerHello) GetLocalPeerId() []byte {
-	if x != nil {
-		return x.LocalPeerId
-	}
-	return nil
-}
-
-func (x *ServerHello) GetStartedAtNs() int64 {
-	if x != nil {
-		return x.StartedAtNs
-	}
-	return 0
-}
-
-func (x *ServerHello) GetWaitForAttach() bool {
-	if x != nil {
-		return x.WaitForAttach
-	}
-	return false
-}
-
 type SnapshotStart struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -440,7 +468,7 @@ type SnapshotStart struct {
 
 func (x *SnapshotStart) Reset() {
 	*x = SnapshotStart{}
-	mi := &file_pb_ingest_ingest_proto_msgTypes[2]
+	mi := &file_pb_ingest_ingest_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -452,7 +480,7 @@ func (x *SnapshotStart) String() string {
 func (*SnapshotStart) ProtoMessage() {}
 
 func (x *SnapshotStart) ProtoReflect() protoreflect.Message {
-	mi := &file_pb_ingest_ingest_proto_msgTypes[2]
+	mi := &file_pb_ingest_ingest_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -465,7 +493,7 @@ func (x *SnapshotStart) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SnapshotStart.ProtoReflect.Descriptor instead.
 func (*SnapshotStart) Descriptor() ([]byte, []int) {
-	return file_pb_ingest_ingest_proto_rawDescGZIP(), []int{2}
+	return file_pb_ingest_ingest_proto_rawDescGZIP(), []int{3}
 }
 
 type SnapshotEnd struct {
@@ -476,7 +504,7 @@ type SnapshotEnd struct {
 
 func (x *SnapshotEnd) Reset() {
 	*x = SnapshotEnd{}
-	mi := &file_pb_ingest_ingest_proto_msgTypes[3]
+	mi := &file_pb_ingest_ingest_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -488,7 +516,7 @@ func (x *SnapshotEnd) String() string {
 func (*SnapshotEnd) ProtoMessage() {}
 
 func (x *SnapshotEnd) ProtoReflect() protoreflect.Message {
-	mi := &file_pb_ingest_ingest_proto_msgTypes[3]
+	mi := &file_pb_ingest_ingest_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -501,7 +529,7 @@ func (x *SnapshotEnd) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SnapshotEnd.ProtoReflect.Descriptor instead.
 func (*SnapshotEnd) Descriptor() ([]byte, []int) {
-	return file_pb_ingest_ingest_proto_rawDescGZIP(), []int{3}
+	return file_pb_ingest_ingest_proto_rawDescGZIP(), []int{4}
 }
 
 type StringDef struct {
@@ -514,7 +542,7 @@ type StringDef struct {
 
 func (x *StringDef) Reset() {
 	*x = StringDef{}
-	mi := &file_pb_ingest_ingest_proto_msgTypes[4]
+	mi := &file_pb_ingest_ingest_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -526,7 +554,7 @@ func (x *StringDef) String() string {
 func (*StringDef) ProtoMessage() {}
 
 func (x *StringDef) ProtoReflect() protoreflect.Message {
-	mi := &file_pb_ingest_ingest_proto_msgTypes[4]
+	mi := &file_pb_ingest_ingest_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -539,7 +567,7 @@ func (x *StringDef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StringDef.ProtoReflect.Descriptor instead.
 func (*StringDef) Descriptor() ([]byte, []int) {
-	return file_pb_ingest_ingest_proto_rawDescGZIP(), []int{4}
+	return file_pb_ingest_ingest_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *StringDef) GetId() uint32 {
@@ -566,7 +594,7 @@ type PeerUpsert struct {
 
 func (x *PeerUpsert) Reset() {
 	*x = PeerUpsert{}
-	mi := &file_pb_ingest_ingest_proto_msgTypes[5]
+	mi := &file_pb_ingest_ingest_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -578,7 +606,7 @@ func (x *PeerUpsert) String() string {
 func (*PeerUpsert) ProtoMessage() {}
 
 func (x *PeerUpsert) ProtoReflect() protoreflect.Message {
-	mi := &file_pb_ingest_ingest_proto_msgTypes[5]
+	mi := &file_pb_ingest_ingest_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -591,7 +619,7 @@ func (x *PeerUpsert) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PeerUpsert.ProtoReflect.Descriptor instead.
 func (*PeerUpsert) Descriptor() ([]byte, []int) {
-	return file_pb_ingest_ingest_proto_rawDescGZIP(), []int{5}
+	return file_pb_ingest_ingest_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *PeerUpsert) GetPeerAlias() uint64 {
@@ -625,7 +653,7 @@ type ConnectionUpsert struct {
 
 func (x *ConnectionUpsert) Reset() {
 	*x = ConnectionUpsert{}
-	mi := &file_pb_ingest_ingest_proto_msgTypes[6]
+	mi := &file_pb_ingest_ingest_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -637,7 +665,7 @@ func (x *ConnectionUpsert) String() string {
 func (*ConnectionUpsert) ProtoMessage() {}
 
 func (x *ConnectionUpsert) ProtoReflect() protoreflect.Message {
-	mi := &file_pb_ingest_ingest_proto_msgTypes[6]
+	mi := &file_pb_ingest_ingest_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -650,7 +678,7 @@ func (x *ConnectionUpsert) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConnectionUpsert.ProtoReflect.Descriptor instead.
 func (*ConnectionUpsert) Descriptor() ([]byte, []int) {
-	return file_pb_ingest_ingest_proto_rawDescGZIP(), []int{6}
+	return file_pb_ingest_ingest_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ConnectionUpsert) GetConnAlias() uint64 {
@@ -726,7 +754,7 @@ type ConnectionClosed struct {
 
 func (x *ConnectionClosed) Reset() {
 	*x = ConnectionClosed{}
-	mi := &file_pb_ingest_ingest_proto_msgTypes[7]
+	mi := &file_pb_ingest_ingest_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -738,7 +766,7 @@ func (x *ConnectionClosed) String() string {
 func (*ConnectionClosed) ProtoMessage() {}
 
 func (x *ConnectionClosed) ProtoReflect() protoreflect.Message {
-	mi := &file_pb_ingest_ingest_proto_msgTypes[7]
+	mi := &file_pb_ingest_ingest_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -751,7 +779,7 @@ func (x *ConnectionClosed) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConnectionClosed.ProtoReflect.Descriptor instead.
 func (*ConnectionClosed) Descriptor() ([]byte, []int) {
-	return file_pb_ingest_ingest_proto_rawDescGZIP(), []int{7}
+	return file_pb_ingest_ingest_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ConnectionClosed) GetConnAlias() uint64 {
@@ -781,7 +809,7 @@ type StreamUpsert struct {
 
 func (x *StreamUpsert) Reset() {
 	*x = StreamUpsert{}
-	mi := &file_pb_ingest_ingest_proto_msgTypes[8]
+	mi := &file_pb_ingest_ingest_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -793,7 +821,7 @@ func (x *StreamUpsert) String() string {
 func (*StreamUpsert) ProtoMessage() {}
 
 func (x *StreamUpsert) ProtoReflect() protoreflect.Message {
-	mi := &file_pb_ingest_ingest_proto_msgTypes[8]
+	mi := &file_pb_ingest_ingest_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -806,7 +834,7 @@ func (x *StreamUpsert) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamUpsert.ProtoReflect.Descriptor instead.
 func (*StreamUpsert) Descriptor() ([]byte, []int) {
-	return file_pb_ingest_ingest_proto_rawDescGZIP(), []int{8}
+	return file_pb_ingest_ingest_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *StreamUpsert) GetStreamAlias() uint64 {
@@ -855,7 +883,7 @@ type StreamClosed struct {
 
 func (x *StreamClosed) Reset() {
 	*x = StreamClosed{}
-	mi := &file_pb_ingest_ingest_proto_msgTypes[9]
+	mi := &file_pb_ingest_ingest_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -867,7 +895,7 @@ func (x *StreamClosed) String() string {
 func (*StreamClosed) ProtoMessage() {}
 
 func (x *StreamClosed) ProtoReflect() protoreflect.Message {
-	mi := &file_pb_ingest_ingest_proto_msgTypes[9]
+	mi := &file_pb_ingest_ingest_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -880,7 +908,7 @@ func (x *StreamClosed) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamClosed.ProtoReflect.Descriptor instead.
 func (*StreamClosed) Descriptor() ([]byte, []int) {
-	return file_pb_ingest_ingest_proto_rawDescGZIP(), []int{9}
+	return file_pb_ingest_ingest_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *StreamClosed) GetStreamAlias() uint64 {
@@ -915,7 +943,7 @@ type StreamChunk struct {
 
 func (x *StreamChunk) Reset() {
 	*x = StreamChunk{}
-	mi := &file_pb_ingest_ingest_proto_msgTypes[10]
+	mi := &file_pb_ingest_ingest_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -927,7 +955,7 @@ func (x *StreamChunk) String() string {
 func (*StreamChunk) ProtoMessage() {}
 
 func (x *StreamChunk) ProtoReflect() protoreflect.Message {
-	mi := &file_pb_ingest_ingest_proto_msgTypes[10]
+	mi := &file_pb_ingest_ingest_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -940,7 +968,7 @@ func (x *StreamChunk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamChunk.ProtoReflect.Descriptor instead.
 func (*StreamChunk) Descriptor() ([]byte, []int) {
-	return file_pb_ingest_ingest_proto_rawDescGZIP(), []int{10}
+	return file_pb_ingest_ingest_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *StreamChunk) GetStreamAlias() uint64 {
@@ -968,12 +996,10 @@ var File_pb_ingest_ingest_proto protoreflect.FileDescriptor
 
 const file_pb_ingest_ingest_proto_rawDesc = "" +
 	"\n" +
-	"\x16pb/ingest/ingest.proto\x12\x11wiretap.ingest.v1\"\xa0\x06\n" +
+	"\x16pb/ingest/ingest.proto\x12\x11wiretap.ingest.v1\"\xe1\x05\n" +
 	"\bEnvelope\x12\x10\n" +
 	"\x03seq\x18\x01 \x01(\x04R\x03seq\x12$\n" +
-	"\x0eobserved_at_ns\x18\x02 \x01(\x03R\fobservedAtNs\x12C\n" +
-	"\fserver_hello\x18\n" +
-	" \x01(\v2\x1e.wiretap.ingest.v1.ServerHelloH\x00R\vserverHello\x12I\n" +
+	"\x0eobserved_at_ns\x18\x02 \x01(\x03R\fobservedAtNs\x12I\n" +
 	"\x0esnapshot_start\x18\v \x01(\v2 .wiretap.ingest.v1.SnapshotStartH\x00R\rsnapshotStart\x12C\n" +
 	"\fsnapshot_end\x18\f \x01(\v2\x1e.wiretap.ingest.v1.SnapshotEndH\x00R\vsnapshotEnd\x12=\n" +
 	"\n" +
@@ -985,14 +1011,18 @@ const file_pb_ingest_ingest_proto_rawDesc = "" +
 	"\rstream_upsert\x18\x18 \x01(\v2\x1f.wiretap.ingest.v1.StreamUpsertH\x00R\fstreamUpsert\x12F\n" +
 	"\rstream_closed\x18\x19 \x01(\v2\x1f.wiretap.ingest.v1.StreamClosedH\x00R\fstreamClosed\x12C\n" +
 	"\fstream_chunk\x18\x1a \x01(\v2\x1e.wiretap.ingest.v1.StreamChunkH\x00R\vstreamChunkB\t\n" +
-	"\apayload\"\xde\x01\n" +
+	"\apayloadJ\x04\b\n" +
+	"\x10\v\"\xaf\x01\n" +
+	"\vClientHello\x12)\n" +
+	"\x10protocol_version\x18\x01 \x01(\rR\x0fprotocolVersion\x12\x17\n" +
+	"\apeer_id\x18\x02 \x01(\fR\x06peerId\x12\x1f\n" +
+	"\vclient_name\x18\x03 \x01(\tR\n" +
+	"clientName\x12\x17\n" +
+	"\aboot_id\x18\x04 \x01(\fR\x06bootId\x12\"\n" +
+	"\rstarted_at_ns\x18\x05 \x01(\x03R\vstartedAtNs\"U\n" +
 	"\vServerHello\x12)\n" +
 	"\x10protocol_version\x18\x01 \x01(\rR\x0fprotocolVersion\x12\x1b\n" +
-	"\tsource_id\x18\x02 \x01(\tR\bsourceId\x12\x17\n" +
-	"\aboot_id\x18\x03 \x01(\fR\x06bootId\x12\"\n" +
-	"\rlocal_peer_id\x18\x04 \x01(\fR\vlocalPeerId\x12\"\n" +
-	"\rstarted_at_ns\x18\x05 \x01(\x03R\vstartedAtNs\x12&\n" +
-	"\x0fwait_for_attach\x18\x06 \x01(\bR\rwaitForAttach\"\x0f\n" +
+	"\tsource_id\x18\x02 \x01(\tR\bsourceId\"\x0f\n" +
 	"\rSnapshotStart\"\r\n" +
 	"\vSnapshotEnd\"1\n" +
 	"\tStringDef\x12\x0e\n" +
@@ -1065,42 +1095,42 @@ func file_pb_ingest_ingest_proto_rawDescGZIP() []byte {
 }
 
 var file_pb_ingest_ingest_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_pb_ingest_ingest_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_pb_ingest_ingest_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_pb_ingest_ingest_proto_goTypes = []any{
 	(Direction)(0),           // 0: wiretap.ingest.v1.Direction
 	(CloseReason)(0),         // 1: wiretap.ingest.v1.CloseReason
 	(*Envelope)(nil),         // 2: wiretap.ingest.v1.Envelope
-	(*ServerHello)(nil),      // 3: wiretap.ingest.v1.ServerHello
-	(*SnapshotStart)(nil),    // 4: wiretap.ingest.v1.SnapshotStart
-	(*SnapshotEnd)(nil),      // 5: wiretap.ingest.v1.SnapshotEnd
-	(*StringDef)(nil),        // 6: wiretap.ingest.v1.StringDef
-	(*PeerUpsert)(nil),       // 7: wiretap.ingest.v1.PeerUpsert
-	(*ConnectionUpsert)(nil), // 8: wiretap.ingest.v1.ConnectionUpsert
-	(*ConnectionClosed)(nil), // 9: wiretap.ingest.v1.ConnectionClosed
-	(*StreamUpsert)(nil),     // 10: wiretap.ingest.v1.StreamUpsert
-	(*StreamClosed)(nil),     // 11: wiretap.ingest.v1.StreamClosed
-	(*StreamChunk)(nil),      // 12: wiretap.ingest.v1.StreamChunk
+	(*ClientHello)(nil),      // 3: wiretap.ingest.v1.ClientHello
+	(*ServerHello)(nil),      // 4: wiretap.ingest.v1.ServerHello
+	(*SnapshotStart)(nil),    // 5: wiretap.ingest.v1.SnapshotStart
+	(*SnapshotEnd)(nil),      // 6: wiretap.ingest.v1.SnapshotEnd
+	(*StringDef)(nil),        // 7: wiretap.ingest.v1.StringDef
+	(*PeerUpsert)(nil),       // 8: wiretap.ingest.v1.PeerUpsert
+	(*ConnectionUpsert)(nil), // 9: wiretap.ingest.v1.ConnectionUpsert
+	(*ConnectionClosed)(nil), // 10: wiretap.ingest.v1.ConnectionClosed
+	(*StreamUpsert)(nil),     // 11: wiretap.ingest.v1.StreamUpsert
+	(*StreamClosed)(nil),     // 12: wiretap.ingest.v1.StreamClosed
+	(*StreamChunk)(nil),      // 13: wiretap.ingest.v1.StreamChunk
 }
 var file_pb_ingest_ingest_proto_depIdxs = []int32{
-	3,  // 0: wiretap.ingest.v1.Envelope.server_hello:type_name -> wiretap.ingest.v1.ServerHello
-	4,  // 1: wiretap.ingest.v1.Envelope.snapshot_start:type_name -> wiretap.ingest.v1.SnapshotStart
-	5,  // 2: wiretap.ingest.v1.Envelope.snapshot_end:type_name -> wiretap.ingest.v1.SnapshotEnd
-	6,  // 3: wiretap.ingest.v1.Envelope.string_def:type_name -> wiretap.ingest.v1.StringDef
-	7,  // 4: wiretap.ingest.v1.Envelope.peer_upsert:type_name -> wiretap.ingest.v1.PeerUpsert
-	8,  // 5: wiretap.ingest.v1.Envelope.connection_upsert:type_name -> wiretap.ingest.v1.ConnectionUpsert
-	9,  // 6: wiretap.ingest.v1.Envelope.connection_closed:type_name -> wiretap.ingest.v1.ConnectionClosed
-	10, // 7: wiretap.ingest.v1.Envelope.stream_upsert:type_name -> wiretap.ingest.v1.StreamUpsert
-	11, // 8: wiretap.ingest.v1.Envelope.stream_closed:type_name -> wiretap.ingest.v1.StreamClosed
-	12, // 9: wiretap.ingest.v1.Envelope.stream_chunk:type_name -> wiretap.ingest.v1.StreamChunk
-	0,  // 10: wiretap.ingest.v1.ConnectionUpsert.direction:type_name -> wiretap.ingest.v1.Direction
-	0,  // 11: wiretap.ingest.v1.StreamUpsert.direction:type_name -> wiretap.ingest.v1.Direction
-	1,  // 12: wiretap.ingest.v1.StreamClosed.reason:type_name -> wiretap.ingest.v1.CloseReason
-	0,  // 13: wiretap.ingest.v1.StreamChunk.direction:type_name -> wiretap.ingest.v1.Direction
-	14, // [14:14] is the sub-list for method output_type
-	14, // [14:14] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	5,  // 0: wiretap.ingest.v1.Envelope.snapshot_start:type_name -> wiretap.ingest.v1.SnapshotStart
+	6,  // 1: wiretap.ingest.v1.Envelope.snapshot_end:type_name -> wiretap.ingest.v1.SnapshotEnd
+	7,  // 2: wiretap.ingest.v1.Envelope.string_def:type_name -> wiretap.ingest.v1.StringDef
+	8,  // 3: wiretap.ingest.v1.Envelope.peer_upsert:type_name -> wiretap.ingest.v1.PeerUpsert
+	9,  // 4: wiretap.ingest.v1.Envelope.connection_upsert:type_name -> wiretap.ingest.v1.ConnectionUpsert
+	10, // 5: wiretap.ingest.v1.Envelope.connection_closed:type_name -> wiretap.ingest.v1.ConnectionClosed
+	11, // 6: wiretap.ingest.v1.Envelope.stream_upsert:type_name -> wiretap.ingest.v1.StreamUpsert
+	12, // 7: wiretap.ingest.v1.Envelope.stream_closed:type_name -> wiretap.ingest.v1.StreamClosed
+	13, // 8: wiretap.ingest.v1.Envelope.stream_chunk:type_name -> wiretap.ingest.v1.StreamChunk
+	0,  // 9: wiretap.ingest.v1.ConnectionUpsert.direction:type_name -> wiretap.ingest.v1.Direction
+	0,  // 10: wiretap.ingest.v1.StreamUpsert.direction:type_name -> wiretap.ingest.v1.Direction
+	1,  // 11: wiretap.ingest.v1.StreamClosed.reason:type_name -> wiretap.ingest.v1.CloseReason
+	0,  // 12: wiretap.ingest.v1.StreamChunk.direction:type_name -> wiretap.ingest.v1.Direction
+	13, // [13:13] is the sub-list for method output_type
+	13, // [13:13] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_pb_ingest_ingest_proto_init() }
@@ -1109,7 +1139,6 @@ func file_pb_ingest_ingest_proto_init() {
 		return
 	}
 	file_pb_ingest_ingest_proto_msgTypes[0].OneofWrappers = []any{
-		(*Envelope_ServerHello)(nil),
 		(*Envelope_SnapshotStart)(nil),
 		(*Envelope_SnapshotEnd)(nil),
 		(*Envelope_StringDef)(nil),
@@ -1126,7 +1155,7 @@ func file_pb_ingest_ingest_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pb_ingest_ingest_proto_rawDesc), len(file_pb_ingest_ingest_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   11,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
