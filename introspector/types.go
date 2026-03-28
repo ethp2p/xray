@@ -64,8 +64,17 @@ type SlotDetail struct {
 }
 
 type wsMessage struct {
-	Type    string        `json:"type"`
-	Slot    *SlotSummary  `json:"slot,omitempty"`
-	Slots   []SlotSummary `json:"slots,omitempty"`
-	Current uint64        `json:"current_slot,omitempty"`
+	Type      string        `json:"type"`
+	Slot      *SlotSummary  `json:"slot,omitempty"`
+	Slots     []SlotSummary `json:"slots,omitempty"`
+	Current   uint64        `json:"current_slot,omitempty"`
+	PeerCount *int          `json:"peer_count,omitempty"`
 }
+
+type FinalizedSlot struct {
+	SourceID string
+	Detail   SlotDetail
+}
+
+// Storage is a placeholder for the persistence layer (Task 6).
+type Storage struct{}

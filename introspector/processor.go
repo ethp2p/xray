@@ -31,34 +31,52 @@ type streamState struct {
 	decoder  StreamDecoder
 }
 
-type Processor struct {
-	mu sync.RWMutex
+type sourceState struct {
+	strings  map[uint32]string
+	streams  map[uint64]*streamState
+	peers    *PeerMap
+	slots    map[uint64]*slotAggregate
+	lastSlot uint64
+}
 
+func newSourceState() *sourceState {
+	return &sourceState{
+		strings: make(map[uint32]string),
+		streams: make(map[uint64]*streamState),
+		peers:   NewPeerMap(),
+		slots:   make(map[uint64]*slotAggregate),
+	}
+}
+
+type Processor struct {
+	mu    sync.RWMutex
 	clock eth.SlotClock
 
-	strings map[uint32]string
-	streams map[uint64]*streamState
-	slots   map[uint64]*slotAggregate
-
-	onUpdate func(SlotSummary, uint64)
+	sources    map[string]*sourceState
+	onUpdate   func(string, SlotSummary, uint64)
+	onFinalize func(string, SlotDetail)
 }
 
 func NewProcessor(clock eth.SlotClock) *Processor {
 	return &Processor{
 		clock:   clock,
-		strings: make(map[uint32]string),
-		streams: make(map[uint64]*streamState),
-		slots:   make(map[uint64]*slotAggregate),
+		sources: make(map[string]*sourceState),
 	}
 }
 
-func (p *Processor) SetOnUpdate(fn func(SlotSummary, uint64)) {
+func (p *Processor) SetOnUpdate(fn func(string, SlotSummary, uint64)) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.onUpdate = fn
 }
 
-func (p *Processor) Apply(event *ingestpb.Envelope) {
+func (p *Processor) SetOnFinalize(fn func(string, SlotDetail)) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.onFinalize = fn
+}
+
+func (p *Processor) ApplyForSource(sourceID string, event *ingestpb.Envelope) {
 	if event == nil {
 		return
 	}
@@ -66,25 +84,62 @@ func (p *Processor) Apply(event *ingestpb.Envelope) {
 	switch payload := event.Payload.(type) {
 	case *ingestpb.Envelope_StringDef:
 		p.mu.Lock()
-		p.strings[payload.StringDef.Id] = payload.StringDef.Value
+		src := p.ensureSourceLocked(sourceID)
+		src.strings[payload.StringDef.Id] = payload.StringDef.Value
 		p.mu.Unlock()
+
+	case *ingestpb.Envelope_PeerUpsert:
+		p.mu.Lock()
+		src := p.ensureSourceLocked(sourceID)
+		src.peers.UpsertPeer(payload.PeerUpsert.PeerAlias, payload.PeerUpsert.PeerId)
+		p.mu.Unlock()
+
+	case *ingestpb.Envelope_ConnectionUpsert:
+		cu := payload.ConnectionUpsert
+		p.mu.Lock()
+		src := p.ensureSourceLocked(sourceID)
+		src.peers.UpsertConnection(cu.ConnAlias, ConnState{
+			PeerAlias:  cu.PeerAlias,
+			RemoteAddr: cu.RemoteAddr,
+			LocalAddr:  cu.LocalAddr,
+			Direction:  dirString(cu.Direction),
+			Transport:  src.strings[cu.TransportId],
+			Security:   src.strings[cu.SecurityId],
+			Muxer:      src.strings[cu.MuxerId],
+			OpenedAtNs: cu.OpenedAtNs,
+		})
+		p.mu.Unlock()
+
+	case *ingestpb.Envelope_ConnectionClosed:
+		p.mu.Lock()
+		src := p.ensureSourceLocked(sourceID)
+		src.peers.CloseConnection(payload.ConnectionClosed.ConnAlias)
+		p.mu.Unlock()
+
 	case *ingestpb.Envelope_StreamUpsert:
-		p.handleStreamUpsert(payload.StreamUpsert)
+		p.handleStreamUpsert(sourceID, payload.StreamUpsert)
+
 	case *ingestpb.Envelope_StreamClosed:
-		p.handleStreamClosed(payload.StreamClosed)
+		p.handleStreamClosed(sourceID, payload.StreamClosed)
+
 	case *ingestpb.Envelope_StreamChunk:
-		p.handleStreamChunk(event.ObservedAtNs, payload.StreamChunk)
+		p.handleStreamChunk(sourceID, event.ObservedAtNs, payload.StreamChunk)
 	}
 }
 
-func (p *Processor) ListSlots(search string, limit int) []SlotSummary {
+func (p *Processor) ListSlots(sourceID string, search string, limit int) []SlotSummary {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
+	src := p.sources[sourceID]
+	if src == nil {
+		return nil
+	}
+
 	currentSlot := p.currentSlotLocked()
-	rows := make([]SlotSummary, 0, len(p.slots))
+	rows := make([]SlotSummary, 0, len(src.slots))
 	search = strings.TrimSpace(strings.ToLower(search))
-	for _, agg := range p.slots {
+	for _, agg := range src.slots {
 		summary := agg.summary
 		summary.Finalized = summary.Slot < currentSlot
 		if search != "" {
@@ -105,85 +160,16 @@ func (p *Processor) ListSlots(search string, limit int) []SlotSummary {
 	return rows
 }
 
-func (p *Processor) SlotDetail(slot uint64, protocol, topic, messageKind string) (SlotDetail, bool) {
+func (p *Processor) SlotDetail(sourceID string, slot uint64) (SlotDetail, bool) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	agg := p.slots[slot]
-	if agg == nil {
+	src := p.sources[sourceID]
+	if src == nil {
 		return SlotDetail{}, false
 	}
 
-	currentSlot := p.currentSlotLocked()
-	summary := agg.summary
-	summary.Finalized = summary.Slot < currentSlot
-
-	detail := SlotDetail{Summary: summary}
-
-	buckets := make([]SlotBucketPoint, 0, len(agg.buckets))
-	for _, bucket := range agg.buckets {
-		buckets = append(buckets, *bucket)
-	}
-	sort.Slice(buckets, func(i, j int) bool {
-		return buckets[i].OffsetMs < buckets[j].OffsetMs
-	})
-	for i := range buckets {
-		bbd := agg.bucketBreakdown[buckets[i].OffsetMs]
-		if len(bbd) == 0 {
-			continue
-		}
-		rows := make([]BucketBreakdown, 0, len(bbd))
-		for _, bb := range bbd {
-			if protocol != "" && bb.Protocol != protocol {
-				continue
-			}
-			if topic != "" && bb.Topic != topic {
-				continue
-			}
-			if messageKind != "" && bb.MessageKind != messageKind {
-				continue
-			}
-			rows = append(rows, *bb)
-		}
-		sort.Slice(rows, func(a, b int) bool {
-			la := rows[a].BytesIn + rows[a].BytesOut
-			lb := rows[b].BytesIn + rows[b].BytesOut
-			return la > lb
-		})
-		buckets[i].Breakdown = rows
-	}
-	detail.Buckets = buckets
-
-	breakdown := make([]SlotBreakdown, 0, len(agg.breakdown))
-	for _, row := range agg.breakdown {
-		if protocol != "" && row.Protocol != protocol {
-			continue
-		}
-		if topic != "" && row.Topic != topic {
-			continue
-		}
-		if messageKind != "" && row.MessageKind != messageKind {
-			continue
-		}
-		breakdown = append(breakdown, *row)
-	}
-	sort.Slice(breakdown, func(i, j int) bool {
-		left := breakdown[i].BytesIn + breakdown[i].BytesOut
-		right := breakdown[j].BytesIn + breakdown[j].BytesOut
-		if left == right {
-			if breakdown[i].Protocol == breakdown[j].Protocol {
-				if breakdown[i].Topic == breakdown[j].Topic {
-					return breakdown[i].MessageKind < breakdown[j].MessageKind
-				}
-				return breakdown[i].Topic < breakdown[j].Topic
-			}
-			return breakdown[i].Protocol < breakdown[j].Protocol
-		}
-		return left > right
-	})
-	detail.Breakdown = breakdown
-
-	return detail, true
+	return p.buildSlotDetailLocked(src, slot)
 }
 
 func (p *Processor) CurrentSlot() uint64 {
@@ -192,7 +178,40 @@ func (p *Processor) CurrentSlot() uint64 {
 	return p.currentSlotLocked()
 }
 
-func (p *Processor) handleStreamUpsert(stream *ingestpb.StreamUpsert) {
+func (p *Processor) ResetSourceAliases(sourceID string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	src := p.sources[sourceID]
+	if src == nil {
+		return
+	}
+	src.strings = make(map[uint32]string)
+	src.streams = make(map[uint64]*streamState)
+	src.peers.Clear()
+}
+
+func (p *Processor) ListPeers(sourceID string) []PeerSummary {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	src := p.sources[sourceID]
+	if src == nil {
+		return nil
+	}
+	return src.peers.ListPeers()
+}
+
+func (p *Processor) ensureSourceLocked(sourceID string) *sourceState {
+	src := p.sources[sourceID]
+	if src == nil {
+		src = newSourceState()
+		p.sources[sourceID] = src
+	}
+	return src
+}
+
+func (p *Processor) handleStreamUpsert(sourceID string, stream *ingestpb.StreamUpsert) {
 	if stream == nil {
 		return
 	}
@@ -200,30 +219,42 @@ func (p *Processor) handleStreamUpsert(stream *ingestpb.StreamUpsert) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	protocol := p.strings[stream.ProtocolId]
-	p.streams[stream.StreamAlias] = &streamState{
+	src := p.ensureSourceLocked(sourceID)
+	protocol := src.strings[stream.ProtocolId]
+	src.streams[stream.StreamAlias] = &streamState{
 		protocol: protocol,
 		decoder:  newEthStreamDecoder(protocol),
 	}
 }
 
-func (p *Processor) handleStreamClosed(stream *ingestpb.StreamClosed) {
+func (p *Processor) handleStreamClosed(sourceID string, stream *ingestpb.StreamClosed) {
 	if stream == nil {
 		return
 	}
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	delete(p.streams, stream.StreamAlias)
+
+	src := p.sources[sourceID]
+	if src == nil {
+		return
+	}
+	delete(src.streams, stream.StreamAlias)
 }
 
-func (p *Processor) handleStreamChunk(observedAtNs int64, chunk *ingestpb.StreamChunk) {
+func (p *Processor) handleStreamChunk(sourceID string, observedAtNs int64, chunk *ingestpb.StreamChunk) {
 	if chunk == nil {
 		return
 	}
 
 	p.mu.Lock()
-	state := p.streams[chunk.StreamAlias]
+	src := p.sources[sourceID]
+	if src == nil {
+		p.mu.Unlock()
+		return
+	}
+
+	state := src.streams[chunk.StreamAlias]
 	if state == nil {
 		p.mu.Unlock()
 		return
@@ -235,20 +266,43 @@ func (p *Processor) handleStreamChunk(observedAtNs int64, chunk *ingestpb.Stream
 		return
 	}
 
-	agg := p.ensureSlotLocked(ref)
+	currentSlot := ref.Slot
+
+	// Slot finalization: when we advance to a new slot, finalize the previous one
+	if src.lastSlot > 0 && currentSlot > src.lastSlot {
+		if agg := src.slots[src.lastSlot]; agg != nil {
+			detail, _ := p.buildSlotDetailLocked(src, src.lastSlot)
+			if p.onFinalize != nil {
+				p.onFinalize(sourceID, detail)
+			}
+		}
+	}
+	src.lastSlot = currentSlot
+
+	agg := ensureSlotLocked(src, ref)
 	bucketOffset := (ref.OffsetMillis / slotBucketWidthMs) * slotBucketWidthMs
-	p.addRawTrafficLocked(agg, observedAtNs, ref.OffsetMillis, chunk.Direction, uint64(len(chunk.Data)))
+	addRawTrafficLocked(agg, observedAtNs, ref.OffsetMillis, chunk.Direction, uint64(len(chunk.Data)))
+
+	// Evict oldest slot when we exceed the cap
+	if len(src.slots) > 256 {
+		var oldest uint64
+		for s := range src.slots {
+			if oldest == 0 || s < oldest {
+				oldest = s
+			}
+		}
+		delete(src.slots, oldest)
+	}
 
 	updatedSummary := agg.summary
-	currentSlot := ref.Slot
 	onUpdate := p.onUpdate
 
 	if state.decoder == nil {
-		p.addBreakdownLocked(agg, bucketOffset, chunk.Direction, uint64(len(chunk.Data)), state.protocol, "", "raw", 0)
+		addBreakdownLocked(agg, bucketOffset, chunk.Direction, uint64(len(chunk.Data)), state.protocol, "", "raw", 0)
 		updatedSummary = agg.summary
 		p.mu.Unlock()
 		if onUpdate != nil {
-			onUpdate(updatedSummary, currentSlot)
+			onUpdate(sourceID, updatedSummary, currentSlot)
 		}
 		return
 	}
@@ -266,7 +320,7 @@ func (p *Processor) handleStreamChunk(observedAtNs int64, chunk *ingestpb.Stream
 			}
 		}
 
-		p.addBreakdownLocked(agg, bucketOffset, chunk.Direction, uint64(wireBytes), state.protocol, topic, msgKind, bleedDistance)
+		addBreakdownLocked(agg, bucketOffset, chunk.Direction, uint64(wireBytes), state.protocol, topic, msgKind, bleedDistance)
 
 		if bleedDistance > 0 {
 			wb := uint64(wireBytes)
@@ -288,7 +342,6 @@ func (p *Processor) handleStreamChunk(observedAtNs int64, chunk *ingestpb.Stream
 			}
 		}
 
-		// Propagate per-slot metadata from beacon_block PUBLISH on ingress
 		if topic == "beacon_block" && msgKind == "PUBLISH" && chunk.Direction == ingestpb.Direction_DIRECTION_IN {
 			if v := tagValue(tags, eth.TagProposerIndex); v != "" {
 				if idx, err := strconv.ParseUint(v, 10, 64); err == nil {
@@ -321,19 +374,79 @@ func (p *Processor) handleStreamChunk(observedAtNs int64, chunk *ingestpb.Stream
 		err = state.decoder.ObserveWrite(chunk.Data, emit)
 	}
 	if err != nil {
-		p.addBreakdownLocked(agg, bucketOffset, chunk.Direction, uint64(len(chunk.Data)), state.protocol, "", "decode_error", 0)
+		addBreakdownLocked(agg, bucketOffset, chunk.Direction, uint64(len(chunk.Data)), state.protocol, "", "decode_error", 0)
 		state.decoder.Reset()
 	}
 	updatedSummary = agg.summary
 	p.mu.Unlock()
 
 	if onUpdate != nil {
-		onUpdate(updatedSummary, currentSlot)
+		onUpdate(sourceID, updatedSummary, currentSlot)
 	}
 }
 
-func (p *Processor) ensureSlotLocked(ref eth.SlotRef) *slotAggregate {
-	agg := p.slots[ref.Slot]
+func (p *Processor) buildSlotDetailLocked(src *sourceState, slot uint64) (SlotDetail, bool) {
+	agg := src.slots[slot]
+	if agg == nil {
+		return SlotDetail{}, false
+	}
+
+	currentSlot := p.currentSlotLocked()
+	summary := agg.summary
+	summary.Finalized = summary.Slot < currentSlot
+
+	detail := SlotDetail{Summary: summary}
+
+	buckets := make([]SlotBucketPoint, 0, len(agg.buckets))
+	for _, bucket := range agg.buckets {
+		buckets = append(buckets, *bucket)
+	}
+	sort.Slice(buckets, func(i, j int) bool {
+		return buckets[i].OffsetMs < buckets[j].OffsetMs
+	})
+	for i := range buckets {
+		bbd := agg.bucketBreakdown[buckets[i].OffsetMs]
+		if len(bbd) == 0 {
+			continue
+		}
+		rows := make([]BucketBreakdown, 0, len(bbd))
+		for _, bb := range bbd {
+			rows = append(rows, *bb)
+		}
+		sort.Slice(rows, func(a, b int) bool {
+			la := rows[a].BytesIn + rows[a].BytesOut
+			lb := rows[b].BytesIn + rows[b].BytesOut
+			return la > lb
+		})
+		buckets[i].Breakdown = rows
+	}
+	detail.Buckets = buckets
+
+	breakdown := make([]SlotBreakdown, 0, len(agg.breakdown))
+	for _, row := range agg.breakdown {
+		breakdown = append(breakdown, *row)
+	}
+	sort.Slice(breakdown, func(i, j int) bool {
+		left := breakdown[i].BytesIn + breakdown[i].BytesOut
+		right := breakdown[j].BytesIn + breakdown[j].BytesOut
+		if left == right {
+			if breakdown[i].Protocol == breakdown[j].Protocol {
+				if breakdown[i].Topic == breakdown[j].Topic {
+					return breakdown[i].MessageKind < breakdown[j].MessageKind
+				}
+				return breakdown[i].Topic < breakdown[j].Topic
+			}
+			return breakdown[i].Protocol < breakdown[j].Protocol
+		}
+		return left > right
+	})
+	detail.Breakdown = breakdown
+
+	return detail, true
+}
+
+func ensureSlotLocked(src *sourceState, ref eth.SlotRef) *slotAggregate {
+	agg := src.slots[ref.Slot]
 	if agg != nil {
 		return agg
 	}
@@ -350,11 +463,11 @@ func (p *Processor) ensureSlotLocked(ref eth.SlotRef) *slotAggregate {
 		breakdown:       make(map[slotKey]*SlotBreakdown),
 		bucketBreakdown: make(map[int64]map[slotKey]*BucketBreakdown),
 	}
-	p.slots[ref.Slot] = agg
+	src.slots[ref.Slot] = agg
 	return agg
 }
 
-func (p *Processor) addRawTrafficLocked(agg *slotAggregate, observedAtNs, offsetMs int64, dir ingestpb.Direction, bytes uint64) {
+func addRawTrafficLocked(agg *slotAggregate, observedAtNs, offsetMs int64, dir ingestpb.Direction, bytes uint64) {
 	bucketOffset := (offsetMs / slotBucketWidthMs) * slotBucketWidthMs
 	point := agg.buckets[bucketOffset]
 	if point == nil {
@@ -373,10 +486,9 @@ func (p *Processor) addRawTrafficLocked(agg *slotAggregate, observedAtNs, offset
 	agg.summary.LastUpdatedNs = observedAtNs
 }
 
-func (p *Processor) addBreakdownLocked(agg *slotAggregate, bucketOffset int64, dir ingestpb.Direction, bytes uint64, protocol, topic, messageKind string, bleedDistance int) {
+func addBreakdownLocked(agg *slotAggregate, bucketOffset int64, dir ingestpb.Direction, bytes uint64, protocol, topic, messageKind string, bleedDistance int) {
 	key := slotKey{protocol: protocol, topic: topic, messageKind: messageKind}
 
-	// Slot-level breakdown
 	row := agg.breakdown[key]
 	if row == nil {
 		row = &SlotBreakdown{Protocol: protocol, Topic: topic, MessageKind: messageKind}
@@ -396,7 +508,6 @@ func (p *Processor) addBreakdownLocked(agg *slotAggregate, bucketOffset int64, d
 		}
 	}
 
-	// Per-bucket breakdown
 	bbd := agg.bucketBreakdown[bucketOffset]
 	if bbd == nil {
 		bbd = make(map[slotKey]*BucketBreakdown)
@@ -421,7 +532,6 @@ func (p *Processor) addBreakdownLocked(agg *slotAggregate, bucketOffset int64, d
 		}
 	}
 
-	// Distance bucketing
 	if bleedDistance > 0 {
 		distKey := strconv.Itoa(bleedDistance)
 		if bleedDistance >= 4 {
@@ -460,6 +570,17 @@ func (p *Processor) currentSlotLocked() uint64 {
 		return 0
 	}
 	return ref.Slot
+}
+
+func dirString(d ingestpb.Direction) string {
+	switch d {
+	case ingestpb.Direction_DIRECTION_IN:
+		return "inbound"
+	case ingestpb.Direction_DIRECTION_OUT:
+		return "outbound"
+	default:
+		return "unknown"
+	}
 }
 
 func summaryString(summary SlotSummary) string {

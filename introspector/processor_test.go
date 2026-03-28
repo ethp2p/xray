@@ -12,12 +12,14 @@ func TestProcessorTracksSlotTrafficAndBreakdown(t *testing.T) {
 	clock := eth.NewSlotClock(time.Unix(1606824023, 0), 12)
 	p := NewProcessor(clock)
 
-	p.Apply(&ingestpb.Envelope{
+	const src = "test-source"
+
+	p.ApplyForSource(src, &ingestpb.Envelope{
 		Payload: &ingestpb.Envelope_StringDef{
 			StringDef: &ingestpb.StringDef{Id: 1, Value: "/meshsub/1.1.0"},
 		},
 	})
-	p.Apply(&ingestpb.Envelope{
+	p.ApplyForSource(src, &ingestpb.Envelope{
 		Payload: &ingestpb.Envelope_StreamUpsert{
 			StreamUpsert: &ingestpb.StreamUpsert{
 				StreamAlias: 1,
@@ -39,14 +41,14 @@ func TestProcessorTracksSlotTrafficAndBreakdown(t *testing.T) {
 			},
 		},
 	}
-	p.Apply(event)
+	p.ApplyForSource(src, event)
 
 	ref, ok := clock.At(now)
 	if !ok {
 		t.Fatal("expected slot ref")
 	}
 
-	detail, exists := p.SlotDetail(ref.Slot, "", "", "")
+	detail, exists := p.SlotDetail(src, ref.Slot)
 	if !exists {
 		t.Fatal("expected slot detail")
 	}

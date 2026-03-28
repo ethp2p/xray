@@ -16,6 +16,8 @@ import (
 
 type Server struct {
 	processor *Processor
+	registry  *SourceRegistry
+	storage   *Storage
 
 	mu      sync.Mutex
 	clients map[*websocket.Conn]struct{}
@@ -25,9 +27,11 @@ type Server struct {
 	flushScheduled bool
 }
 
-func NewServer(processor *Processor) *Server {
+func NewServer(processor *Processor, registry *SourceRegistry, storage *Storage) *Server {
 	s := &Server{
 		processor:      processor,
+		registry:       registry,
+		storage:        storage,
 		clients:        make(map[*websocket.Conn]struct{}),
 		pendingUpdates: make(map[uint64]SlotSummary),
 	}
@@ -47,6 +51,18 @@ func (s *Server) Serve(l net.Listener) error {
 	return http.Serve(l, s.Handler())
 }
 
+func (s *Server) resolveSourceID(r *http.Request) string {
+	if id := r.URL.Query().Get("source"); id != "" {
+		return id
+	}
+	if s.registry != nil {
+		if id, err := s.registry.DefaultSourceID(); err == nil {
+			return id
+		}
+	}
+	return ""
+}
+
 func (s *Server) handleSlots(w http.ResponseWriter, r *http.Request) {
 	limit := 256
 	if raw := r.URL.Query().Get("limit"); raw != "" {
@@ -55,8 +71,9 @@ func (s *Server) handleSlots(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	sourceID := s.resolveSourceID(r)
 	writeJSON(w, map[string]any{
-		"slots": s.processor.ListSlots(r.URL.Query().Get("search"), limit),
+		"slots": s.processor.ListSlots(sourceID, r.URL.Query().Get("search"), limit),
 	})
 }
 
@@ -68,12 +85,8 @@ func (s *Server) handleSlotDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	detail, ok := s.processor.SlotDetail(
-		slot,
-		r.URL.Query().Get("protocol"),
-		r.URL.Query().Get("topic"),
-		r.URL.Query().Get("message_kind"),
-	)
+	sourceID := s.resolveSourceID(r)
+	detail, ok := s.processor.SlotDetail(sourceID, slot)
 	if !ok {
 		http.NotFound(w, r)
 		return
@@ -118,7 +131,8 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	}()
 }
 
-func (s *Server) broadcastUpdate(summary SlotSummary, current uint64) {
+// broadcastUpdate ignores sourceID for now; source scoping is added in Task 9.
+func (s *Server) broadcastUpdate(sourceID string, summary SlotSummary, current uint64) {
 	s.mu.Lock()
 	s.pendingUpdates[summary.Slot] = summary
 	if current > s.pendingCurrent {

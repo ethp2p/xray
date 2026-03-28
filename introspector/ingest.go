@@ -16,12 +16,14 @@ import (
 type UnixIngestClient struct {
 	socketPath string
 	processor  *Processor
+	sourceID   string
 }
 
-func NewUnixIngestClient(socketPath string, processor *Processor) *UnixIngestClient {
+func NewUnixIngestClient(socketPath string, processor *Processor, sourceID string) *UnixIngestClient {
 	return &UnixIngestClient{
 		socketPath: socketPath,
 		processor:  processor,
+		sourceID:   sourceID,
 	}
 }
 
@@ -64,7 +66,7 @@ func (c *UnixIngestClient) runOnce() error {
 		if err := readDelimited(conn, &event, 4<<20); err != nil {
 			return err
 		}
-		c.processor.Apply(&event)
+		c.processor.ApplyForSource(c.sourceID, &event)
 	}
 }
 

@@ -21,8 +21,9 @@ func main() {
 
 	clock := eth.NewSlotClock(time.Unix(*genesisUnix, 0), *secondsPerSlot)
 	processor := introspector.NewProcessor(clock)
-	ingestClient := introspector.NewUnixIngestClient(*socketPath, processor)
-	server := introspector.NewServer(processor)
+	registry := introspector.NewSourceRegistry()
+	ingestClient := introspector.NewUnixIngestClient(*socketPath, processor, "default")
+	server := introspector.NewServer(processor, registry, nil)
 
 	go func() {
 		if err := ingestClient.Run(); err != nil {
