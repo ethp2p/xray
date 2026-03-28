@@ -43,7 +43,6 @@ func (s *Storage) WriteSlot(sourceID string, detail SlotDetail) error {
 		return fmt.Errorf("marshal slot detail: %w", err)
 	}
 
-	// Atomic write: temp file then rename
 	slotFile := filepath.Join(slotsDir, fmt.Sprintf("%d.json", detail.Summary.Slot))
 	tmpFile := slotFile + ".tmp"
 	if err := os.WriteFile(tmpFile, data, 0644); err != nil {
@@ -117,17 +116,11 @@ func slotExistsInEpochFile(path string, slot uint64) bool {
 func (s *Storage) insertSummaryLocked(sourceID string, summary SlotSummary) {
 	idx := s.indices[sourceID]
 
-	// Dedup: check if slot already in index
-	for _, existing := range idx {
-		if existing.Slot == summary.Slot {
-			return
-		}
+	pos := sort.Search(len(idx), func(i int) bool { return idx[i].Slot <= summary.Slot })
+	if pos < len(idx) && idx[pos].Slot == summary.Slot {
+		return
 	}
 
-	// Binary search for insertion point (descending order)
-	pos := sort.Search(len(idx), func(i int) bool {
-		return idx[i].Slot < summary.Slot
-	})
 	idx = append(idx, SlotSummary{})
 	copy(idx[pos+1:], idx[pos:])
 	idx[pos] = summary
@@ -286,16 +279,15 @@ func (s *Storage) LoadSummaryIndex(sourceID string) error {
 
 // Prune removes slot files and epoch index files older than the retention window,
 // and trims the corresponding in-memory index entries.
-func (s *Storage) Prune(retentionDays int, slotsPerEpoch, secondsPerSlot uint64) error {
+func (s *Storage) Prune(retentionDays int, slotsPerEpoch, secondsPerSlot uint64, genesisUnix int64) error {
 	if retentionDays <= 0 {
 		return nil
 	}
 
 	retentionSeconds := uint64(retentionDays) * 24 * 3600
 	retentionSlots := retentionSeconds / secondsPerSlot
-	now := uint64(time.Now().Unix())
-	// Approximate current slot (genesis = 0 simplification; caller sets secondsPerSlot)
-	currentSlot := now / secondsPerSlot
+	elapsed := uint64(time.Now().Unix()) - uint64(genesisUnix)
+	currentSlot := elapsed / secondsPerSlot
 	var cutoffSlot uint64
 	if currentSlot > retentionSlots {
 		cutoffSlot = currentSlot - retentionSlots

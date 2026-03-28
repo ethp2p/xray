@@ -37,7 +37,6 @@ func main() {
 		log.Fatalf("create storage: %v", err)
 	}
 
-	// Restore historical sources and their summary indices.
 	metas, err := storage.LoadSourceMetas()
 	if err != nil {
 		log.Printf("load source metas: %v", err)
@@ -49,7 +48,6 @@ func main() {
 		}
 	}
 
-	// Persist finalized slots via a dedicated goroutine.
 	finalizeCh := make(chan introspector.FinalizedSlot, 64)
 	processor.SetOnFinalize(func(sourceID string, detail introspector.SlotDetail) {
 		select {
@@ -71,7 +69,6 @@ func main() {
 		}
 	}()
 
-	// Retention pruning on a daily tick.
 	go func() {
 		ticker := time.NewTicker(24 * time.Hour)
 		defer ticker.Stop()
@@ -80,7 +77,7 @@ func main() {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				if err := storage.Prune(*retentionDays, 32, *secondsPerSlot); err != nil {
+				if err := storage.Prune(*retentionDays, 32, *secondsPerSlot, *genesisUnix); err != nil {
 					log.Printf("retention prune: %v", err)
 				}
 			}

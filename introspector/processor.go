@@ -202,6 +202,17 @@ func (p *Processor) ListPeers(sourceID string) []PeerSummary {
 	return src.peers.ListPeers()
 }
 
+func (p *Processor) PeerCount(sourceID string) int {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	src := p.sources[sourceID]
+	if src == nil {
+		return 0
+	}
+	return src.peers.Count()
+}
+
 func (p *Processor) ensureSourceLocked(sourceID string) *sourceState {
 	src := p.sources[sourceID]
 	if src == nil {
@@ -268,31 +279,29 @@ func (p *Processor) handleStreamChunk(sourceID string, observedAtNs int64, chunk
 
 	currentSlot := ref.Slot
 
-	// Slot finalization: when we advance to a new slot, finalize the previous one
+	var finalizeDetail *SlotDetail
 	if src.lastSlot > 0 && currentSlot > src.lastSlot {
 		if agg := src.slots[src.lastSlot]; agg != nil {
-			detail, _ := p.buildSlotDetailLocked(src, src.lastSlot)
-			if p.onFinalize != nil {
-				p.onFinalize(sourceID, detail)
+			d, _ := p.buildSlotDetailLocked(src, src.lastSlot)
+			finalizeDetail = &d
+		}
+
+		if len(src.slots) > 256 {
+			var oldest uint64
+			for s := range src.slots {
+				if oldest == 0 || s < oldest {
+					oldest = s
+				}
 			}
+			delete(src.slots, oldest)
 		}
 	}
 	src.lastSlot = currentSlot
+	onFinalize := p.onFinalize
 
 	agg := ensureSlotLocked(src, ref)
 	bucketOffset := (ref.OffsetMillis / slotBucketWidthMs) * slotBucketWidthMs
 	addRawTrafficLocked(agg, observedAtNs, ref.OffsetMillis, chunk.Direction, uint64(len(chunk.Data)))
-
-	// Evict oldest slot when we exceed the cap
-	if len(src.slots) > 256 {
-		var oldest uint64
-		for s := range src.slots {
-			if oldest == 0 || s < oldest {
-				oldest = s
-			}
-		}
-		delete(src.slots, oldest)
-	}
 
 	updatedSummary := agg.summary
 	onUpdate := p.onUpdate
@@ -301,6 +310,9 @@ func (p *Processor) handleStreamChunk(sourceID string, observedAtNs int64, chunk
 		addBreakdownLocked(agg, bucketOffset, chunk.Direction, uint64(len(chunk.Data)), state.protocol, "", "raw", 0)
 		updatedSummary = agg.summary
 		p.mu.Unlock()
+		if finalizeDetail != nil && onFinalize != nil {
+			onFinalize(sourceID, *finalizeDetail)
+		}
 		if onUpdate != nil {
 			onUpdate(sourceID, updatedSummary, currentSlot)
 		}
@@ -380,6 +392,9 @@ func (p *Processor) handleStreamChunk(sourceID string, observedAtNs int64, chunk
 	updatedSummary = agg.summary
 	p.mu.Unlock()
 
+	if finalizeDetail != nil && onFinalize != nil {
+		onFinalize(sourceID, *finalizeDetail)
+	}
 	if onUpdate != nil {
 		onUpdate(sourceID, updatedSummary, currentSlot)
 	}

@@ -1,21 +1,15 @@
 package instrument
 
 import (
-	"encoding/binary"
 	"errors"
-	"fmt"
-	"io"
 	"net"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	ingestpb "github.com/ethp2p/instrument/pb/ingest"
-	"google.golang.org/protobuf/proto"
+	"github.com/ethp2p/instrument/wire"
 )
-
-const ingestProtocolVersion = 2
 
 type ingestSnapshot struct {
 	strings     []string
@@ -133,30 +127,25 @@ func (s *SinkIngest) connectLoop() {
 }
 
 func (s *SinkIngest) connect() error {
-	network := "tcp"
-	if strings.Contains(s.address, "/") {
-		network = "unix"
-	}
-
-	conn, err := net.DialTimeout(network, s.address, 5*time.Second)
+	conn, err := net.DialTimeout(wire.InferNetwork(s.address), s.address, 5*time.Second)
 	if err != nil {
 		return err
 	}
 
 	hello := &ingestpb.ClientHello{
-		ProtocolVersion: ingestProtocolVersion,
+		ProtocolVersion: wire.IngestProtocolVersion,
 		PeerId:          s.localPeerID,
 		ClientName:      s.clientName,
 		BootId:          s.bootID,
 		StartedAtNs:     s.startedAtNs,
 	}
-	if err := writeTypedMessage(conn, wireClientHelloByte, hello); err != nil {
+	if err := wire.WriteClientHello(conn, hello); err != nil {
 		conn.Close()
 		return err
 	}
 
-	var serverHello ingestpb.ServerHello
-	if err := readTypedMessage(conn, wireServerHelloByte, &serverHello); err != nil {
+	serverHello, err := wire.ReadServerHello(conn)
+	if err != nil {
 		conn.Close()
 		return err
 	}
@@ -179,7 +168,7 @@ func (s *SinkIngest) sendSnapshot() error {
 
 	s.nextSeq.Store(0)
 
-	if err := writeTypedEnvelope(conn, s.nextEnvelope(&ingestpb.Envelope_SnapshotStart{
+	if err := wire.WriteEnvelope(conn, s.nextEnvelope(&ingestpb.Envelope_SnapshotStart{
 		SnapshotStart: &ingestpb.SnapshotStart{},
 	})); err != nil {
 		return err
@@ -187,35 +176,35 @@ func (s *SinkIngest) sendSnapshot() error {
 
 	snap := s.emitter.ingestSnapshot()
 	for id, value := range snap.strings {
-		if err := writeTypedEnvelope(conn, s.nextEnvelope(&ingestpb.Envelope_StringDef{
+		if err := wire.WriteEnvelope(conn, s.nextEnvelope(&ingestpb.Envelope_StringDef{
 			StringDef: &ingestpb.StringDef{Id: uint32(id), Value: value},
 		})); err != nil {
 			return err
 		}
 	}
 	for _, peer := range snap.peers {
-		if err := writeTypedEnvelope(conn, s.nextEnvelope(&ingestpb.Envelope_PeerUpsert{
+		if err := wire.WriteEnvelope(conn, s.nextEnvelope(&ingestpb.Envelope_PeerUpsert{
 			PeerUpsert: peer,
 		})); err != nil {
 			return err
 		}
 	}
 	for _, connection := range snap.connections {
-		if err := writeTypedEnvelope(conn, s.nextEnvelope(&ingestpb.Envelope_ConnectionUpsert{
+		if err := wire.WriteEnvelope(conn, s.nextEnvelope(&ingestpb.Envelope_ConnectionUpsert{
 			ConnectionUpsert: connection,
 		})); err != nil {
 			return err
 		}
 	}
 	for _, stream := range snap.streams {
-		if err := writeTypedEnvelope(conn, s.nextEnvelope(&ingestpb.Envelope_StreamUpsert{
+		if err := wire.WriteEnvelope(conn, s.nextEnvelope(&ingestpb.Envelope_StreamUpsert{
 			StreamUpsert: stream,
 		})); err != nil {
 			return err
 		}
 	}
 
-	return writeTypedEnvelope(conn, s.nextEnvelope(&ingestpb.Envelope_SnapshotEnd{
+	return wire.WriteEnvelope(conn, s.nextEnvelope(&ingestpb.Envelope_SnapshotEnd{
 		SnapshotEnd: &ingestpb.SnapshotEnd{},
 	}))
 }
@@ -233,7 +222,7 @@ func (s *SinkIngest) writePump() {
 			if conn == nil {
 				return
 			}
-			if err := writeTypedEnvelope(conn, event); err != nil {
+			if err := wire.WriteEnvelope(conn, event); err != nil {
 				return
 			}
 		case <-s.done:
@@ -370,70 +359,3 @@ func directionToIngest(d Direction) ingestpb.Direction {
 	}
 }
 
-// Wire format: type discriminator byte + varint-delimited protobuf.
-// Duplicated from introspector/codec.go to avoid circular dependency
-// (instrument package cannot import introspector).
-const (
-	wireClientHelloByte byte = 0x01
-	wireServerHelloByte byte = 0x02
-	wireEnvelopeByte    byte = 0x03
-)
-
-func writeTypedMessage(w io.Writer, typ byte, msg proto.Message) error {
-	data, err := proto.Marshal(msg)
-	if err != nil {
-		return err
-	}
-	if _, err := w.Write([]byte{typ}); err != nil {
-		return err
-	}
-	var buf [binary.MaxVarintLen64]byte
-	n := binary.PutUvarint(buf[:], uint64(len(data)))
-	if _, err := w.Write(buf[:n]); err != nil {
-		return err
-	}
-	_, err = w.Write(data)
-	return err
-}
-
-func readTypedMessage(r io.Reader, expectedType byte, msg proto.Message) error {
-	var typBuf [1]byte
-	if _, err := io.ReadFull(r, typBuf[:]); err != nil {
-		return err
-	}
-	if typBuf[0] != expectedType {
-		return fmt.Errorf("unexpected message type: got 0x%02x, want 0x%02x", typBuf[0], expectedType)
-	}
-
-	var length uint64
-	var shift uint
-	for {
-		var b [1]byte
-		if _, err := io.ReadFull(r, b[:]); err != nil {
-			return err
-		}
-		length |= uint64(b[0]&0x7f) << shift
-		if b[0]&0x80 == 0 {
-			break
-		}
-		shift += 7
-		if shift >= 64 {
-			return errors.New("varint overflow")
-		}
-	}
-
-	const maxMessageSize = 4 << 20
-	if length > maxMessageSize {
-		return fmt.Errorf("message too large: %d bytes", length)
-	}
-
-	data := make([]byte, length)
-	if _, err := io.ReadFull(r, data); err != nil {
-		return err
-	}
-	return proto.Unmarshal(data, msg)
-}
-
-func writeTypedEnvelope(w io.Writer, event *ingestpb.Envelope) error {
-	return writeTypedMessage(w, wireEnvelopeByte, event)
-}

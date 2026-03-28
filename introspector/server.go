@@ -235,7 +235,6 @@ func (s *Server) broadcastUpdate(sourceID string, summary SlotSummary, current u
 func (s *Server) flushPendingUpdates() {
 	s.mu.Lock()
 
-	// Group pending updates by sourceID.
 	type sourceUpdates struct {
 		slots   []SlotSummary
 		current uint64
@@ -253,7 +252,6 @@ func (s *Server) flushPendingUpdates() {
 		su.current = s.pendingCurrent[sid]
 	}
 
-	// Group clients by sourceID.
 	clientsBySource := make(map[string][]*websocket.Conn)
 	for _, wsc := range s.clients {
 		clientsBySource[wsc.sourceID] = append(clientsBySource[wsc.sourceID], wsc.conn)
@@ -276,6 +274,9 @@ func (s *Server) flushPendingUpdates() {
 			SourceID: sid,
 			Slots:    su.slots,
 			Current:  su.current,
+		}
+		if pc := s.processor.PeerCount(sid); pc > 0 {
+			msg.PeerCount = &pc
 		}
 		targets := clientsBySource[sid]
 		// Also send to clients with no source filter (empty sourceID).

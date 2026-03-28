@@ -395,6 +395,13 @@ type ApiSlotDetail = {
   breakdown: ApiBucketBreakdown[];
 };
 
+type ApiPeer = {
+  peer_id: string;
+  connections: { remote_addr: string; direction: string; transport: string; opened_at_ns: number }[];
+  first_seen_ns: number;
+  last_seen_ns: number;
+};
+
 type ApiWsMessage = {
   type?: string;
   current_slot?: number;
@@ -1166,7 +1173,7 @@ export default function App() {
   // Live data signals
   const [liveSlots, setLiveSlots] = createSignal<SlotData[]>([]);
   const [liveDetail, setLiveDetail] = createSignal<ApiSlotDetail | null>(null);
-  const [livePeers, setLivePeers] = createSignal<any[]>([]);
+  const [livePeers, setLivePeers] = createSignal<ApiPeer[]>([]);
 
   // Search
   const [searchMode, setSearchMode] = createSignal(false);

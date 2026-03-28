@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestStorageWriteAndReadSlot(t *testing.T) {
@@ -160,5 +161,45 @@ func TestStorageSearchSlots(t *testing.T) {
 	}
 	if results[0].Slot != 105 {
 		t.Fatalf("expected first result slot 105, got %d", results[0].Slot)
+	}
+}
+
+func TestStoragePrune(t *testing.T) {
+	s, err := NewStorage(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	genesisUnix := int64(1606824023)
+	secondsPerSlot := uint64(12)
+	slotsPerEpoch := uint64(32)
+
+	// Compute a "current" slot relative to real genesis
+	now := time.Now().Unix()
+	currentSlot := uint64(now-genesisUnix) / secondsPerSlot
+
+	// Write one old slot (should be pruned) and one recent slot (should survive)
+	oldSlot := currentSlot - 400_000 // ~55 days ago
+	recentSlot := currentSlot - 100  // ~20 minutes ago
+
+	for _, slot := range []uint64{oldSlot, recentSlot} {
+		detail := SlotDetail{
+			Summary: SlotSummary{Slot: slot, Epoch: slot / slotsPerEpoch},
+		}
+		if err := s.WriteSlot("src1", detail); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := s.Prune(30, slotsPerEpoch, secondsPerSlot, genesisUnix); err != nil {
+		t.Fatal(err)
+	}
+
+	summaries := s.ListSummaries("src1", 100)
+	if len(summaries) != 1 {
+		t.Fatalf("expected 1 summary after prune, got %d", len(summaries))
+	}
+	if summaries[0].Slot != recentSlot {
+		t.Fatalf("expected surviving slot %d, got %d", recentSlot, summaries[0].Slot)
 	}
 }

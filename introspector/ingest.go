@@ -5,14 +5,12 @@ import (
 	"log"
 	"net"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
 	ingestpb "github.com/ethp2p/instrument/pb/ingest"
+	"github.com/ethp2p/instrument/wire"
 )
-
-const ingestProtocolVersion uint32 = 2
 
 // IngestListener accepts inbound connections from probes, performs a
 // ClientHello/ServerHello handshake, then streams Envelope events into the
@@ -47,9 +45,8 @@ func NewIngestListener(processor *Processor, registry *SourceRegistry, storage *
 func (l *IngestListener) ListenAndServe(ctx context.Context, address string) error {
 	l.ctx = ctx
 
-	network := "tcp"
-	if strings.Contains(address, "/") {
-		network = "unix"
+	network := wire.InferNetwork(address)
+	if network == "unix" {
 		os.Remove(address)
 	}
 
@@ -82,7 +79,7 @@ func (l *IngestListener) handleConnection(conn net.Conn) {
 		return
 	}
 
-	if hello.ProtocolVersion != ingestProtocolVersion {
+	if hello.ProtocolVersion != wire.IngestProtocolVersion {
 		conn.Close()
 		return
 	}
@@ -110,7 +107,7 @@ func (l *IngestListener) handleConnection(conn net.Conn) {
 	}()
 
 	err = WriteServerHello(conn, &ingestpb.ServerHello{
-		ProtocolVersion: ingestProtocolVersion,
+		ProtocolVersion: wire.IngestProtocolVersion,
 		SourceId:        sourceID,
 	})
 	if err != nil {
