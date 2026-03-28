@@ -27,9 +27,9 @@ type Emitter struct {
 	closed bool
 
 	// Collaborators set after construction.
-	strings  *StringInterner
-	net      *wrappedNetwork
-	unixSink *SinkUnix
+	strings    *StringInterner
+	net        *wrappedNetwork
+	ingestSink *SinkIngest
 
 	nextPeerAlias atomic.Uint64
 	nextConnID    atomic.Uint32

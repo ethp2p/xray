@@ -32,6 +32,7 @@ import (
 type liveMessage struct {
 	Type        string                    `json:"type"`
 	Slot        *introspector.SlotSummary `json:"slot"`
+	Slots       []introspector.SlotSummary `json:"slots"`
 	CurrentSlot uint64                    `json:"current_slot"`
 }
 
@@ -208,15 +209,19 @@ func startIntrospectorFixture(t *testing.T, ctx context.Context) introspectorFix
 
 	clock := eth.NewSlotClock(time.Unix(1606824023, 0), 12)
 	processor := introspector.NewProcessor(clock)
-	ingestClient := introspector.NewUnixIngestClient(socketPath, processor)
+	registry := introspector.NewSourceRegistry()
+	ingestListener := introspector.NewIngestListener(processor, registry, nil)
 
 	ingestCtx, ingestCancel := context.WithCancel(ctx)
 	t.Cleanup(ingestCancel)
 	go func() {
-		_ = ingestClient.RunContext(ingestCtx)
+		_ = ingestListener.ListenAndServe(ingestCtx, socketPath)
 	}()
 
-	server := introspector.NewServer(processor)
+	// Brief pause so the listener binds before the probe dials.
+	time.Sleep(50 * time.Millisecond)
+
+	server := introspector.NewServer(processor, registry, nil)
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	t.Cleanup(func() {
@@ -300,6 +305,11 @@ func waitForSlotUpdate(t *testing.T, conn *websocket.Conn) liveMessage {
 	for time.Now().Before(deadline) {
 		msg := readLiveMessage(t, conn)
 		if msg.Type == "slot_update" && msg.Slot != nil {
+			return msg
+		}
+		// Server batches updates as slot_batch with a Slots array.
+		if msg.Type == "slot_batch" && len(msg.Slots) > 0 {
+			msg.Slot = &msg.Slots[0]
 			return msg
 		}
 	}

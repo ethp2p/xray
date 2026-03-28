@@ -23,7 +23,7 @@ type Host struct {
 
 	emitter      *Emitter
 	decodeWorker *decodeWorker
-	unixSink     *SinkUnix
+	ingestSink   *SinkIngest
 }
 
 // Network returns the wrapped network.
@@ -78,8 +78,8 @@ func (h *Host) Close() error {
 		h.decodeWorker.stop()
 	}
 
-	if h.unixSink != nil {
-		h.unixSink.Close()
+	if h.ingestSink != nil {
+		h.ingestSink.Close()
 	}
 
 	return h.Host.Close()
@@ -161,14 +161,11 @@ func Wrap(h host.Host, opts ...Option) (*Host, error) {
 		emitter.AddSink(fileSink)
 	}
 
-	if cfg.unixSocketPath != "" {
-		unixSink, err := NewSinkUnix(cfg.unixSocketPath, emitter, h.ID().String(), []byte(h.ID()), cfg.waitForAttach)
-		if err != nil {
-			return nil, err
-		}
-		instrumentedHost.unixSink = unixSink
-		emitter.unixSink = unixSink
-		wrappedNet.unixSink = unixSink
+	if cfg.ingestAddr != "" {
+		ingestSink := NewSinkIngest(cfg.ingestAddr, emitter, cfg.clientName, []byte(h.ID()), cfg.waitForAttach)
+		instrumentedHost.ingestSink = ingestSink
+		emitter.ingestSink = ingestSink
+		wrappedNet.ingestSink = ingestSink
 	}
 
 	h.Network().Notify(&notifiee{
@@ -176,9 +173,9 @@ func Wrap(h host.Host, opts ...Option) (*Host, error) {
 		net:     wrappedNet,
 	})
 
-	if instrumentedHost.unixSink != nil && cfg.waitForAttach {
-		if err := instrumentedHost.unixSink.WaitForAttach(); err != nil {
-			instrumentedHost.unixSink.Close()
+	if instrumentedHost.ingestSink != nil && cfg.waitForAttach {
+		if err := instrumentedHost.ingestSink.WaitForAttach(); err != nil {
+			instrumentedHost.ingestSink.Close()
 			return nil, err
 		}
 	}
@@ -210,9 +207,9 @@ func (n *notifiee) Connected(_ network.Network, conn network.Conn) {
 			ConnOpened: &pb.ConnOpened{Info: info},
 		},
 	})
-	if n.net.unixSink != nil {
-		n.net.unixSink.EmitPeerUpsert(wc.peerAlias, []byte(conn.RemotePeer()))
-		n.net.unixSink.EmitConnectionUpsert(buildIngestConnectionUpsert(wc, info))
+	if n.net.ingestSink != nil {
+		n.net.ingestSink.EmitPeerUpsert(wc.peerAlias, []byte(conn.RemotePeer()))
+		n.net.ingestSink.EmitConnectionUpsert(buildIngestConnectionUpsert(wc, info))
 	}
 }
 
@@ -230,7 +227,7 @@ func (n *notifiee) Disconnected(_ network.Network, conn network.Conn) {
 			},
 		},
 	})
-	if n.net.unixSink != nil {
-		n.net.unixSink.EmitConnectionClosed(uint64(wc.connID), time.Now().UnixNano())
+	if n.net.ingestSink != nil {
+		n.net.ingestSink.EmitConnectionClosed(uint64(wc.connID), time.Now().UnixNano())
 	}
 }

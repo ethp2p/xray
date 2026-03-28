@@ -65,8 +65,8 @@ func (s *wrappedStream) Conn() network.Conn {
 func (s *wrappedStream) Read(p []byte) (int, error) {
 	n, err := s.Stream.Read(p)
 	if n > 0 {
-		if s.net.unixSink != nil {
-			s.net.unixSink.EmitStreamChunk(uint64(s.streamID), DirectionIn, p[:n])
+		if s.net.ingestSink != nil {
+			s.net.ingestSink.EmitStreamChunk(uint64(s.streamID), DirectionIn, p[:n])
 		}
 		if s.decoder != nil {
 			s.worker.send(s, DirectionIn, p[:n])
@@ -80,8 +80,8 @@ func (s *wrappedStream) Read(p []byte) (int, error) {
 func (s *wrappedStream) Write(p []byte) (int, error) {
 	n, err := s.Stream.Write(p)
 	if n > 0 {
-		if s.net.unixSink != nil {
-			s.net.unixSink.EmitStreamChunk(uint64(s.streamID), DirectionOut, p[:n])
+		if s.net.ingestSink != nil {
+			s.net.ingestSink.EmitStreamChunk(uint64(s.streamID), DirectionOut, p[:n])
 		}
 		if s.decoder != nil {
 			s.worker.send(s, DirectionOut, p[:n])
@@ -99,8 +99,8 @@ func (s *wrappedStream) Close() error {
 			StreamClosed: &pb.StreamClosed{StreamId: s.streamID},
 		},
 	})
-	if s.net.unixSink != nil {
-		s.net.unixSink.EmitStreamClosed(uint64(s.streamID), time.Now().UnixNano(), ingestpb.CloseReason_CLOSE_REASON_CLOSE)
+	if s.net.ingestSink != nil {
+		s.net.ingestSink.EmitStreamClosed(uint64(s.streamID), time.Now().UnixNano(), ingestpb.CloseReason_CLOSE_REASON_CLOSE)
 	}
 	return s.Stream.Close()
 }
@@ -112,8 +112,8 @@ func (s *wrappedStream) Reset() error {
 			StreamClosed: &pb.StreamClosed{StreamId: s.streamID},
 		},
 	})
-	if s.net.unixSink != nil {
-		s.net.unixSink.EmitStreamClosed(uint64(s.streamID), time.Now().UnixNano(), ingestpb.CloseReason_CLOSE_REASON_RESET)
+	if s.net.ingestSink != nil {
+		s.net.ingestSink.EmitStreamClosed(uint64(s.streamID), time.Now().UnixNano(), ingestpb.CloseReason_CLOSE_REASON_RESET)
 	}
 	return s.Stream.Reset()
 }
@@ -125,7 +125,7 @@ type wrappedNetwork struct {
 	strings    *StringInterner
 	worker     *decodeWorker
 	initDecode func(streamID uint32, protocol string) (StreamDecoder, []OnMessage)
-	unixSink   *SinkUnix
+	ingestSink *SinkIngest
 
 	mu       sync.RWMutex
 	peers    map[peer.ID]*trackedPeer
@@ -286,9 +286,9 @@ func (n *wrappedNetwork) wrapStream(s network.Stream) *wrappedStream {
 					ConnOpened: &pb.ConnOpened{Info: info},
 				},
 			})
-			if n.unixSink != nil {
-				n.unixSink.EmitPeerUpsert(wc.peerAlias, []byte(s.Conn().RemotePeer()))
-				n.unixSink.EmitConnectionUpsert(buildIngestConnectionUpsert(wc, info))
+			if n.ingestSink != nil {
+				n.ingestSink.EmitPeerUpsert(wc.peerAlias, []byte(s.Conn().RemotePeer()))
+				n.ingestSink.EmitConnectionUpsert(buildIngestConnectionUpsert(wc, info))
 			}
 		}
 	}
@@ -322,8 +322,8 @@ func (n *wrappedNetwork) wrapStream(s network.Stream) *wrappedStream {
 			StreamOpened: &pb.StreamOpened{Info: info},
 		},
 	})
-	if n.unixSink != nil {
-		n.unixSink.EmitStreamUpsert(buildIngestStreamUpsert(info))
+	if n.ingestSink != nil {
+		n.ingestSink.EmitStreamUpsert(buildIngestStreamUpsert(info))
 	}
 	return ws
 }

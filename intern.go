@@ -49,8 +49,8 @@ func (si *StringInterner) Intern(s string) uint32 {
 			StringDef: &pb.StringDef{Id: id, Value: s},
 		},
 	})
-	if si.emitter.unixSink != nil {
-		si.emitter.unixSink.EmitStringDef(id, s)
+	if si.emitter.ingestSink != nil {
+		si.emitter.ingestSink.EmitStringDef(id, s)
 	}
 	return id
 }

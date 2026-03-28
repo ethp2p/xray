@@ -11,7 +11,8 @@ type config struct {
 	ringBufferSize int
 	sinkFilePath   string
 	sinkFileOpts   []SinkFileOption
-	unixSocketPath string
+	ingestAddr     string
+	clientName     string
 	waitForAttach  bool
 	decoders       []decoderEntry
 	onMessage      []OnMessageFactory
@@ -48,14 +49,28 @@ func WithSinkFile(path string, opts ...SinkFileOption) Option {
 	}
 }
 
-// WithUnixSocket enables the private ingest socket on the given Unix domain socket path.
-func WithUnixSocket(path string) Option {
+// WithIngestAddr sets the address of the backend ingest listener to dial.
+// If the address contains '/' it is treated as a Unix domain socket path,
+// otherwise as a TCP address.
+func WithIngestAddr(addr string) Option {
 	return func(c *config) {
-		c.unixSocketPath = path
+		c.ingestAddr = addr
 	}
 }
 
-// WithWaitForAttach blocks startup until an ingest client attaches to the Unix socket.
+// WithUnixSocket is an alias for WithIngestAddr for backward compatibility.
+func WithUnixSocket(addr string) Option {
+	return WithIngestAddr(addr)
+}
+
+// WithClientName sets the client name sent in the ClientHello handshake.
+func WithClientName(name string) Option {
+	return func(c *config) {
+		c.clientName = name
+	}
+}
+
+// WithWaitForAttach blocks startup until the probe connects to the backend.
 func WithWaitForAttach() Option {
 	return func(c *config) {
 		c.waitForAttach = true
