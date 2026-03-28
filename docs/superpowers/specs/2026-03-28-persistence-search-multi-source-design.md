@@ -121,19 +121,26 @@ and `StreamUpsert` to rebuild state. `StreamChunk` events during snapshot
 mode are ignored (the probe should not send them, but the backend is
 tolerant).
 
-### Reconnection semantics
+### Session exclusivity and reconnection
 
-When a probe reconnects (same `peer_id`, new TCP connection), the backend:
+Each source_id has at most one active session at a time. When a new
+connection arrives with a peer_id that maps to an already-connected
+source_id, the backend cancels the old session (closes its connection
+and stops its goroutine) before completing the new handshake. This
+prevents interleaved events from two sessions corrupting the same
+per-source state.
 
-1. Assigns the same `source_id` (deterministic from `peer_id`)
-2. Compares `boot_id` to the previous session
-3. If `boot_id` changed (probe restarted): clears `strings`, `streams`,
-   and `peers` maps for this source. The new snapshot will rebuild them.
-   In-memory `slots` are kept (they are independent of aliases).
-4. If `boot_id` is the same (network interruption): same behavior (clear
-   and rebuild from snapshot), since alias numbering may have diverged.
+On reconnection, after the old session is cancelled:
 
-The fresh snapshot after reconnection is the authoritative state.
+1. The backend assigns the same `source_id` (deterministic from `peer_id`)
+2. Clears `strings`, `streams`, and `peers` maps for this source
+   (aliases are session-local and stale after any disconnection)
+3. Keeps in-memory `slots` (they are independent of aliases)
+4. Updates `SourceInfo` with the new `boot_id`, `client_name`, and
+   connection timestamp
+
+The fresh snapshot after reconnection is the authoritative state for
+alias-dependent data (strings, streams, peers).
 
 ## Peer tracking
 
@@ -304,11 +311,19 @@ File-per-slot with epoch-grouped summary indices, organized by source:
 ```
 <data_dir>/
   <source_id>/
+    source.json
     slots/
       <slot>.json
     index/
       <epoch>.jsonl
 ```
+
+`source.json` persists the `SourceInfo` metadata (source_id, peer_id,
+client_name, last boot_id, last started_at_ns). This file is written on
+first connection and updated on each reconnection. On startup, the backend
+reads `source.json` from each source directory to populate the source
+registry, so `/api/sources` can list historical sources with their
+client_name even when they are not currently connected.
 
 Each `<slot>.json` contains the full `SlotDetail` JSON (summary +
 breakdowns + bucket time series). This is the same JSON shape that
@@ -333,23 +348,42 @@ per epoch, each epoch file is ~6.4 KB. 30 days of data is ~6,750 epochs
 ### Write path
 
 When the processor detects that a slot has finalized (current slot has
-advanced past it), it serializes the slot data and writes both the slot
-file and appends to the epoch index. This happens asynchronously on a
-background goroutine to avoid blocking the ingest path.
+advanced past it), it sends the slot data to a single-writer persistence
+goroutine via a buffered channel. This goroutine serializes the data,
+writes the slot file, and appends to the epoch index. Serializing writes
+through one goroutine prevents duplicate finalization callbacks from
+producing duplicate JSONL entries or overwriting slot files.
+
+The persistence goroutine also inserts the new summary into the in-memory
+summary index, keeping it current for search queries. On retention
+pruning, it removes entries from the in-memory index and deletes the
+corresponding files.
 
 Crash safety: slot files are written to a temporary file in the same
 directory then renamed into place (atomic on POSIX). The epoch index
 append is not atomic, but a truncated last line is detected and discarded
-on load (each line is independently valid JSON).
+on load (each line is independently valid JSON). Duplicate detection:
+before appending, the writer checks if the slot already exists in the
+epoch file (by slot number). This handles the case where the process
+crashed after writing the slot file but before the in-memory eviction
+flag was set, causing a re-finalization on restart.
 
 The in-memory slot map retains the last 256 slots for live dashboard use.
 Evicted slots that have been persisted are dropped from memory.
 
 ### Read path
 
-- `/api/slots?source=<id>`: reads from in-memory slot map (live data)
+- `/api/slots?source=<id>&limit=N`: returns recent slots. For connected
+  sources, merges the in-memory live slots with the in-memory summary
+  index (persisted history). For disconnected historical sources, reads
+  entirely from the summary index. The result is always sorted by slot
+  descending and capped at `limit` (default 256).
 - `/api/slots/:slot?source=<id>`: checks in-memory first, falls back to
-  reading `<source_id>/slots/<slot>.json`
+  reading `<source_id>/slots/<slot>.json`. Historical detail is returned
+  unfiltered (the full persisted JSON blob). The `protocol`, `topic`, and
+  `message_kind` query filters that exist on the current endpoint are
+  dropped; filtering moves to the frontend. This simplifies the read
+  path and makes the persisted blob servable as-is.
 - `/api/search?source=<id>&...`: queries the in-memory summary index
 
 ### Retention
