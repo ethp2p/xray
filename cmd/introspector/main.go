@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"time"
 
 	"github.com/ethp2p/instrument/eth"
@@ -19,6 +20,8 @@ func main() {
 		listenAddr     = flag.String("listen", "127.0.0.1:9100", "HTTP listen address for the dashboard API")
 		genesisUnix    = flag.Int64("genesis-unix", 1606824023, "Beacon chain genesis unix timestamp")
 		secondsPerSlot = flag.Uint64("seconds-per-slot", 12, "Beacon chain seconds per slot")
+		dataDir        = flag.String("data-dir", defaultDataDir(), "Persistence directory for slot data")
+		retentionDays  = flag.Int("retention-days", 30, "Slot retention period in days")
 	)
 	flag.Parse()
 
@@ -28,7 +31,63 @@ func main() {
 	clock := eth.NewSlotClock(time.Unix(*genesisUnix, 0), *secondsPerSlot)
 	processor := introspector.NewProcessor(clock)
 	registry := introspector.NewSourceRegistry()
-	ingestListener := introspector.NewIngestListener(processor, registry, nil)
+
+	storage, err := introspector.NewStorage(*dataDir)
+	if err != nil {
+		log.Fatalf("create storage: %v", err)
+	}
+
+	// Restore historical sources and their summary indices.
+	metas, err := storage.LoadSourceMetas()
+	if err != nil {
+		log.Printf("load source metas: %v", err)
+	}
+	for _, meta := range metas {
+		registry.Register(meta)
+		if err := storage.LoadSummaryIndex(meta.SourceID); err != nil {
+			log.Printf("load summary index for %s: %v", meta.SourceID, err)
+		}
+	}
+
+	// Persist finalized slots via a dedicated goroutine.
+	finalizeCh := make(chan introspector.FinalizedSlot, 64)
+	processor.SetOnFinalize(func(sourceID string, detail introspector.SlotDetail) {
+		select {
+		case finalizeCh <- introspector.FinalizedSlot{SourceID: sourceID, Detail: detail}:
+		case <-ctx.Done():
+		}
+	})
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case item := <-finalizeCh:
+				if err := storage.WriteSlot(item.SourceID, item.Detail); err != nil {
+					log.Printf("persist slot %d: %v", item.Detail.Summary.Slot, err)
+				}
+			}
+		}
+	}()
+
+	// Retention pruning on a daily tick.
+	go func() {
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := storage.Prune(*retentionDays, 32, *secondsPerSlot); err != nil {
+					log.Printf("retention prune: %v", err)
+				}
+			}
+		}
+	}()
+
+	ingestListener := introspector.NewIngestListener(processor, registry, storage)
 
 	go func() {
 		if err := ingestListener.ListenAndServe(ctx, *ingestAddr); err != nil && ctx.Err() == nil {
@@ -36,7 +95,7 @@ func main() {
 		}
 	}()
 
-	server := introspector.NewServer(processor, registry, nil)
+	server := introspector.NewServer(processor, registry, storage)
 	listener, err := net.Listen("tcp", *listenAddr)
 	if err != nil {
 		log.Fatalf("listen failed: %v", err)
@@ -46,4 +105,9 @@ func main() {
 	if err := server.Serve(listener); err != nil {
 		log.Fatalf("server failed: %v", err)
 	}
+}
+
+func defaultDataDir() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".wiretap", "data")
 }

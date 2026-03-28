@@ -65,6 +65,7 @@ type SlotDetail struct {
 
 type wsMessage struct {
 	Type      string        `json:"type"`
+	SourceID  string        `json:"source_id,omitempty"`
 	Slot      *SlotSummary  `json:"slot,omitempty"`
 	Slots     []SlotSummary `json:"slots,omitempty"`
 	Current   uint64        `json:"current_slot,omitempty"`
