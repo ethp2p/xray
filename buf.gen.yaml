@@ -1,0 +1,14 @@
+version: v2
+plugins:
+  - local: /home/ubuntu/go/bin/protoc-gen-go
+    out: .
+    opt: paths=source_relative
+  - local: dashboard/node_modules/.bin/protoc-gen-es
+    out: dashboard/src/gen
+    opt: target=ts
+  - local: dashboard/node_modules/.bin/protoc-gen-connect-es
+    out: dashboard/src/gen
+    opt: target=ts
+  - remote: buf.build/connectrpc/go
+    out: .
+    opt: paths=source_relative

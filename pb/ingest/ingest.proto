@@ -1,0 +1,97 @@
+syntax = "proto3";
+
+package wiretap.ingest.v1;
+
+option go_package = "github.com/ethp2p/instrument/pb/ingest;ingestpb";
+
+message Envelope {
+  uint64 seq = 1;
+  int64 observed_at_ns = 2;
+
+  oneof payload {
+    ServerHello server_hello = 10;
+    SnapshotStart snapshot_start = 11;
+    SnapshotEnd snapshot_end = 12;
+
+    StringDef string_def = 20;
+    PeerUpsert peer_upsert = 21;
+    ConnectionUpsert connection_upsert = 22;
+    ConnectionClosed connection_closed = 23;
+    StreamUpsert stream_upsert = 24;
+    StreamClosed stream_closed = 25;
+    StreamChunk stream_chunk = 26;
+  }
+}
+
+message ServerHello {
+  uint32 protocol_version = 1;
+  string source_id = 2;
+  bytes boot_id = 3;
+  bytes local_peer_id = 4;
+  int64 started_at_ns = 5;
+  bool wait_for_attach = 6;
+}
+
+message SnapshotStart {}
+
+message SnapshotEnd {}
+
+message StringDef {
+  uint32 id = 1;
+  string value = 2;
+}
+
+message PeerUpsert {
+  uint64 peer_alias = 1;
+  bytes peer_id = 2;
+}
+
+message ConnectionUpsert {
+  uint64 conn_alias = 1;
+  uint64 peer_alias = 2;
+  string remote_addr = 3;
+  string local_addr = 4;
+  Direction direction = 5;
+  uint32 transport_id = 6;
+  uint32 security_id = 7;
+  uint32 muxer_id = 8;
+  int64 opened_at_ns = 9;
+}
+
+message ConnectionClosed {
+  uint64 conn_alias = 1;
+  int64 closed_at_ns = 2;
+}
+
+message StreamUpsert {
+  uint64 stream_alias = 1;
+  uint64 conn_alias = 2;
+  Direction direction = 3;
+  uint32 protocol_id = 4;
+  int64 opened_at_ns = 5;
+}
+
+message StreamClosed {
+  uint64 stream_alias = 1;
+  int64 closed_at_ns = 2;
+  CloseReason reason = 3;
+}
+
+message StreamChunk {
+  uint64 stream_alias = 1;
+  Direction direction = 2;
+  bytes data = 3;
+}
+
+enum Direction {
+  DIRECTION_UNKNOWN = 0;
+  DIRECTION_IN = 1;
+  DIRECTION_OUT = 2;
+}
+
+enum CloseReason {
+  CLOSE_REASON_UNKNOWN = 0;
+  CLOSE_REASON_CLOSE = 1;
+  CLOSE_REASON_RESET = 2;
+  CLOSE_REASON_CONN_CLOSED = 3;
+}

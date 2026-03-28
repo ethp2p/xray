@@ -1,0 +1,29 @@
+# Binaries
+dashboard-demo
+trace2json
+*.exe
+
+# Reference code
+ref/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Test artifacts
+*.trace
+*.bak
+
+# Playwright
+dashboard/playwright-report/
+dashboard/test-results/
+
+# Claude Code
+.claude/
+
+# Development tools
+cmd/ingestdump/
+dogfood-output/
+itest/
+.cachebro/

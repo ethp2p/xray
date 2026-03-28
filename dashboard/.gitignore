@@ -1,0 +1,8 @@
+node_modules
+dist
+src/gen
+*.local
+
+# Test/QA artifacts
+.playwright-cli/
+dogfood-output/

@@ -1,0 +1,86 @@
+:root {
+  --b: 'IBM Plex Sans', system-ui, sans-serif;
+  --m: 'Iosevka', monospace;
+
+  /* Type scale: 4 tiers with clear separation */
+  --t-xs: 0.625rem;   /* 10px — axis ticks, tertiary labels */
+  --t-sm: 0.75rem;    /* 12px — attributes, controls, kbd hints */
+  --t-md: 0.8125rem;  /* 13px — primary data, slot numbers, totals */
+  --t-lg: 1rem;       /* 16px — section headers, title */
+
+  /* Tracking for uppercase labels */
+  --track-caps: 0.06em;
+
+  /* Line heights by context */
+  --lh-dense: 1.2;   /* compact rows, labels, data */
+  --lh-body: 1.4;    /* prose, descriptions */
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+button, input, kbd {
+  font: inherit;
+  color: inherit;
+}
+
+img, svg {
+  display: block;
+}
+
+html {
+  line-height: var(--lh-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+  font-kerning: normal;
+}
+
+/* Tabular numerals globally; no effect on non-numeric glyphs */
+#root {
+  font-feature-settings: 'tnum';
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  background: var(--0, #080808);
+}
+
+*:focus-visible {
+  outline: 1px solid var(--fg);
+  outline-offset: -1px;
+}
+
+::-webkit-scrollbar { width: 2px; }
+::-webkit-scrollbar-track { background: var(--0); }
+::-webkit-scrollbar-thumb { background: var(--2); }
+* { scrollbar-width: thin; scrollbar-color: var(--2) transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.15; }
+}
+
+@keyframes slot-enter {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes traffic-pulse {
+  0%, 100% { color: var(--3); }
+  50% { color: var(--fg); }
+}
