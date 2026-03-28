@@ -1,6 +1,7 @@
 services:
   introspector:
     build: .
+    user: "${UID:-1000}:${GID:-1000}"
     ports:
       - "9100:9100"
     volumes:
