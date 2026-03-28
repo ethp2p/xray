@@ -70,7 +70,7 @@ Vite proxies `/api/*` and `/ws` to `localhost:9100` (the backend).
 | `--t-md` | 13px | Primary data, slot numbers, totals |
 | `--t-lg` | 16px | Section headers, title |
 
-All text uses Iosevka monospace (`var(--m)`). Font self-hosted as woff2 in `public/iosevka-400.woff2` with `local()` fallback.
+All text uses Iosevka monospace (`var(--m)`). Font self-hosted as woff2 in `public/iosevka-400.woff2`. No `local()` source; browsers must download the file to avoid phantom font matching.
 
 ### Theme system
 
