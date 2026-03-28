@@ -1102,7 +1102,8 @@ function StreamGraph(props: {
         </div>
         {/* Vertical legend (right side) */}
         <div style={{
-          "flex-shrink": 0, width: "120px", "overflow-y": "auto",
+          "flex-shrink": 0, width: "120px", "min-height": 0,
+          "overflow-y": "auto", "overflow-x": "hidden",
           padding: "6px 8px", display: "flex", "flex-direction": "column", gap: "0",
           "border-left": "1px solid var(--1)",
         }}>
