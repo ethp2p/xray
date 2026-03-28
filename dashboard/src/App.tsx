@@ -791,9 +791,23 @@ function StreamGraph(props: {
     const rect = svgRef?.getBoundingClientRect();
     if (!rect) return;
     const frac = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1));
+    const yFrac = (e.clientY - rect.top) / rect.height;
     setHoverFrac(frac);
-    setHoverX(Math.max(0, Math.min(Math.round(frac * (n() - 1)), n() - 1)));
+    const pi = Math.max(0, Math.min(Math.round(frac * (n() - 1)), n() - 1));
+    setHoverX(pi);
     setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+
+    const pt = props.points[pi];
+    if (!pt) { setHoveredLayer(null); props.onFlowHover(null); return; }
+    const isUpper = yFrac < 0.5;
+    let best: string | null = null;
+    let bestVal = 0;
+    for (const l of layers()) {
+      const v = isUpper ? (pt.flows[l.key]?.in ?? 0) : (pt.flows[l.key]?.out ?? 0);
+      if (v > bestVal) { bestVal = v; best = l.key; }
+    }
+    setHoveredLayer(best);
+    props.onFlowHover(best);
   };
 
   return (
@@ -856,9 +870,7 @@ function StreamGraph(props: {
                   <path
                     d={p.d} fill={p.color}
                     opacity={effectiveHighlight() === null ? streamOp() : effectiveHighlight() === baseKey(p.key) ? 0.9 : dimOp()}
-                    style={{ transition: "opacity 0.15s, d 0.4s ease" }}
-                    onMouseEnter={() => { setHoveredLayer(baseKey(p.key)); props.onFlowHover(baseKey(p.key)); }}
-                    onMouseLeave={() => { setHoveredLayer(null); props.onFlowHover(null); }}
+                    style={{ transition: "opacity 0.15s, d 0.4s ease", "pointer-events": "none" }}
                   />
                 )}
               </For>
@@ -873,12 +885,10 @@ function StreamGraph(props: {
               const tint = () => isHl() ? bleedTintForFlow(flowKey) : null;
               return (
                 <>
-                  <Show when={tint()}><path d={p.d} fill={tint()!} opacity={0.9} /></Show>
+                  <Show when={tint()}><path d={p.d} fill={tint()!} opacity={0.9} style={{ "pointer-events": "none" }} /></Show>
                   <path
                     d={p.d} fill="url(#bleed-hatch)" opacity={isHl() ? 0.9 : 0.8}
-                    style={{ cursor: "default" }}
-                    onMouseEnter={() => { setHoveredLayer(flowKey); props.onFlowHover(flowKey); }}
-                    onMouseLeave={() => { setHoveredLayer(null); props.onFlowHover(null); }}
+                    style={{ "pointer-events": "none" }}
                   />
                 </>
               );
