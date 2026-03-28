@@ -1109,6 +1109,7 @@ export default function App() {
   const [wsStatus, setWsStatus] = createSignal<WsStatus>("disconnected");
   const [followMode, setFollowMode] = createSignal(true);
   const [highlightedFlow, setHighlightedFlow] = createSignal<string | null>(null);
+  const [chartHovered, setChartHovered] = createSignal(false);
 
   // Source management
   const [sources, setSources] = createSignal<{ source_id: string; client_name: string; connected: boolean }[]>([]);
@@ -1266,7 +1267,7 @@ export default function App() {
         }
         if (payload.peer_count !== undefined) setPeerCount(payload.peer_count);
         scheduleFlush();
-        if (followMode()) refreshDetail();
+        if (followMode() && !chartHovered()) refreshDetail();
       };
       socket.onerror = () => { if (!closed) setWsStatus("reconnecting"); };
       socket.onclose = () => {
@@ -1728,7 +1729,11 @@ export default function App() {
           </div>
 
           {/* Stream chart (50% height) */}
-          <div style={{ flex: 1, padding: "4px 8px", "min-height": 0 }}>
+          <div
+            style={{ flex: 1, padding: "4px 8px", "min-height": 0 }}
+            onMouseEnter={() => setChartHovered(true)}
+            onMouseLeave={() => setChartHovered(false)}
+          >
             <StreamGraph
               points={slotDetail()}
               flowTotals={flowBreakdown()}
