@@ -4,30 +4,7 @@ import {
   type JSX,
 } from 'solid-js';
 
-// ── RNG ─────────────────────────────────────────────────────────────────
-
-function rng(seed: number) {
-  let s = seed | 0;
-  return () => {
-    s = s + 0x6D2B79F5 | 0;
-    let t = Math.imul(s ^ s >>> 15, 1 | s);
-    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
-    return ((t ^ t >>> 14) >>> 0) / 4294967296;
-  };
-}
-
 // ── Data model ──────────────────────────────────────────────────────────
-
-const HEAD = 9847523;
-
-type ProtoInfo = { key: string; label: string; short: string };
-
-const PROTOS: ProtoInfo[] = [
-  { key: "gossipsub", label: "GossipSub", short: "gossipsub" },
-  { key: "req-resp", label: "Req/Resp", short: "req/resp" },
-  { key: "discv5", label: "discv5", short: "discv5" },
-  { key: "eth-wire", label: "eth/68", short: "eth/68" },
-];
 
 type ThemeName = "dark" | "light";
 
@@ -104,18 +81,6 @@ function topicColor(t: string, theme: ThemeName): string {
   return theme === "dark" ? `hsl(${h}, 45%, 62%)` : `hsl(${h}, 50%, 38%)`;
 }
 
-const CLIENTS = ["Lighthouse", "Prysm", "Teku", "Nimbus", "Lodestar"];
-
-const PEERS = Array.from({ length: 24 }, (_, i) => {
-  const r = rng(i * 3571);
-  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
-  return {
-    id: "16Uiu2HAm" + Array.from({ length: 8 }, () => chars[Math.floor(r() * chars.length)]).join(""),
-    client: CLIENTS[Math.floor(r() * 5)],
-    idx: i,
-  };
-});
-
 type TopicValues = { i: number; e: number };
 type ProtoData = { i: number; e: number; topics: Record<string, TopicValues> };
 
@@ -133,12 +98,6 @@ type SlotData = {
   totalOut: number;
   total: number;
   meta?: SlotMetaData;
-};
-
-type PeerData = {
-  id: string; client: string; idx: number;
-  spark: number[]; inn: number; out: number;
-  total: number; topProto: string; msgs: number;
 };
 
 // ── Flow data model ─────────────────────────────────────────────────────
@@ -437,109 +396,10 @@ function apiDetailToSlotData(d: ApiSlotDetail): SlotData {
   return { slot: d.summary.slot, protos, totalIn: d.summary.bytes_in, totalOut: d.summary.bytes_out, total: d.summary.bytes_in + d.summary.bytes_out };
 }
 
-function genSlotSeries(seed: number, count = 64): SlotData[] {
-  const r = rng(seed);
-  return Array.from({ length: count }, (_, i) => {
-    const slot = HEAD - count + 1 + i;
-    const epochPos = slot % 32;
-    const burst = epochPos === 0 ? 2.5 : epochPos < 2 ? 1.7 : epochPos === 16 ? 1.2 : 1;
-    const protos: Record<string, ProtoData> = {};
-    let totalIn = 0, totalOut = 0;
-    for (const p of PROTOS) {
-      const base = p.key === "gossipsub" ? 500 : p.key === "req-resp" ? 170 : p.key === "discv5" ? 30 : 100;
-      const topics: Record<string, TopicValues> = {};
-      for (const t of TOPICS_BY_PROTO[p.key] ?? []) {
-        const tBase = base / TOPICS_BY_PROTO[p.key].length * (0.3 + r() * 1.4);
-        const inn = Math.round(tBase * burst * (0.5 + r()));
-        const out = Math.round(tBase * 0.5 * burst * (0.3 + r()));
-        topics[t] = { i: inn, e: out };
-        totalIn += inn;
-        totalOut += out;
-      }
-      const pIn = Object.values(topics).reduce((s, v) => s + v.i, 0);
-      const pOut = Object.values(topics).reduce((s, v) => s + v.e, 0);
-      protos[p.key] = { i: pIn, e: pOut, topics };
-    }
-    return {
-      slot, protos,
-      totalIn: Math.round(totalIn),
-      totalOut: Math.round(totalOut),
-      total: Math.round(totalIn + totalOut),
-    };
-  });
-}
-
-function genPeerStats(seed: number): PeerData[] {
-  const r = rng(seed + 7777);
-  return PEERS.map(p => {
-    const spark = Array.from({ length: 24 }, () => Math.round(r() * 160));
-    const inn = Math.round(200 + r() * 3000);
-    const out = Math.round(100 + r() * 2000);
-    const topProto = PROTOS[Math.floor(r() * 4)].key;
-    return { ...p, spark, inn, out, total: inn + out, topProto, msgs: Math.round(30 + r() * 700) };
-  }).sort((a, b) => b.total - a.total);
-}
-
 const SLOT_DURATION_MS = 12000;
 const TICK_MS = 500;
-const POINTS_PER_SLOT = SLOT_DURATION_MS / TICK_MS + 1; // 25
+const POINTS_PER_SLOT = SLOT_DURATION_MS / TICK_MS + 1;
 const LIVE_SLOTS_FLUSH_MS = 120;
-
-function genSlotDetail(slot: SlotData, slotNum: number): FlowTimePoint[] {
-  const r = rng(slotNum * 7919);
-  const points: FlowTimePoint[] = [];
-
-  for (let step = 0; step < POINTS_PER_SLOT; step++) {
-    const ms = step * TICK_MS;
-    const t = step / (POINTS_PER_SLOT - 1);
-    const flows: Record<string, { in: number; out: number; bleedIn: number; bleedOut: number; bleedByDist: BleedDistData }> = {};
-
-    for (const p of PROTOS) {
-      const sp = slot.protos[p.key];
-      if (!sp) continue;
-
-      let env: number;
-      if (p.key === "gossipsub") {
-        env = t < 0.1 ? 4 : t < 0.25 ? 2 - (t - 0.1) * 8 : 0.3 + r() * 0.3;
-      } else if (p.key === "req-resp") {
-        env = 0.6 + Math.sin(t * Math.PI * 3) * 0.4 + r() * 0.2;
-      } else if (p.key === "discv5") {
-        env = 0.4 + r() * 0.3;
-      } else {
-        env = 0.7 + r() * 0.4 - t * 0.3;
-      }
-
-      for (const tk of TOPICS_BY_PROTO[p.key] ?? []) {
-        const st = sp.topics[tk];
-        if (!st) continue;
-        const flow = groupTopic(tk);
-        if (!flows[flow]) flows[flow] = { in: 0, out: 0, bleedIn: 0, bleedOut: 0, bleedByDist: {} };
-
-        // 80% of bytes are data (PUBLISH), rest split across control kinds
-        const rawIn = Math.max(0, Math.round(st.i / POINTS_PER_SLOT * env * (0.3 + r() * 1.4)));
-        const rawOut = Math.max(0, Math.round(st.e / POINTS_PER_SLOT * env * (0.3 + r() * 1.4)));
-
-        if (p.key === "gossipsub") {
-          const dataFrac = 0.8 + r() * 0.1;
-          flows[flow].in += Math.round(rawIn * dataFrac);
-          flows[flow].out += Math.round(rawOut * dataFrac);
-          // Small control overhead spread across IHAVE/IWANT/GRAFT/PRUNE
-          const ctrlIn = rawIn - Math.round(rawIn * dataFrac);
-          const ctrlOut = rawOut - Math.round(rawOut * dataFrac);
-          flows[flow].in += ctrlIn;
-          flows[flow].out += ctrlOut;
-        } else {
-          flows[flow].in += rawIn;
-          flows[flow].out += rawOut;
-        }
-      }
-    }
-
-    points.push({ offsetMs: ms, flows });
-  }
-
-  return points;
-}
 
 // ── Diverging chart computation ─────────────────────────────────────────
 
@@ -674,22 +534,6 @@ function smooth(pts: [number, number][]): string {
 
 // ── Small components ────────────────────────────────────────────────────
 
-function Spark(props: { data: number[]; w?: number; h?: number; color?: string }) {
-  const w = () => props.w ?? 52;
-  const h = () => props.h ?? 14;
-  const points = createMemo(() => {
-    const max = Math.max(...props.data, 1);
-    return props.data.map((v, i) =>
-      `${(i / (props.data.length - 1)) * w()},${h() - 1 - (v / max) * (h() - 3)}`
-    ).join(" ");
-  });
-  return (
-    <svg width={w()} height={h()} style={{ display: "block" }}>
-      <polyline points={points()} fill="none" stroke={props.color ?? "#888"} stroke-width="1.2" />
-    </svg>
-  );
-}
-
 function Kbd(props: { children: JSX.Element }) {
   return (
     <kbd style={{
@@ -715,9 +559,7 @@ function CmdPalette(props: { onClose: () => void; onCmd: (id: string) => void })
   const cmds = [
     { id: "view:slots", l: "View: Slots" },
     { id: "view:peers", l: "View: Peers" },
-    { id: "live", l: "Toggle live/paused" },
     { id: "theme", l: "Toggle theme" },
-    { id: "mode", l: "Toggle SIM/LIVE mode" },
   ];
 
   const filtered = createMemo(() => {
@@ -1148,20 +990,16 @@ function StreamGraph(props: {
 // ── Main ────────────────────────────────────────────────────────────────
 
 type ViewId = "slots" | "peers";
-type DataMode = "sim" | "live";
 type WsStatus = "connecting" | "connected" | "reconnecting" | "disconnected";
 
 const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.platform);
 const modKey = isMac ? "Cmd" : "Ctrl";
 
 export default function App() {
-  const [tick, setTick] = createSignal(0);
-  const [live, setLive] = createSignal(true);
   const [sel, setSel] = createSignal(0);
   const [view, setView] = createSignal<ViewId>("slots");
   const [cmdOpen, setCmdOpen] = createSignal(false);
   const [theme, setTheme] = createSignal<ThemeName>("dark");
-  const [dataMode, setDataMode] = createSignal<DataMode>("live");
   const [wsStatus, setWsStatus] = createSignal<WsStatus>("disconnected");
   const [highlightedFlow, setHighlightedFlow] = createSignal<string | null>(null);
 
@@ -1180,8 +1018,6 @@ export default function App() {
   const [searchFrom, setSearchFrom] = createSignal("");
   const [searchTo, setSearchTo] = createSignal("");
   const [searchResults, setSearchResults] = createSignal<SlotData[] | null>(null);
-
-  const isLive = () => dataMode() === "live";
 
   const apiUrl = (path: string, extra?: Record<string, string>) => {
     const params = new URLSearchParams();
@@ -1203,66 +1039,21 @@ export default function App() {
       .catch(() => {});
   });
 
-  // Data source switching
-  const slots = createMemo(() => isLive() ? liveSlots() : genSlotSeries(tick() * 17));
-  const peers = createMemo(() => isLive() ? [] : genPeerStats(tick()));
+  const slots = createMemo(() => liveSlots());
   const selData = createMemo(() => {
-    if (isLive()) {
-      const d = liveDetail();
-      if (d) return apiDetailToSlotData(d);
-      const s = slots().find(x => x.slot === sel());
-      return s ?? { slot: 0, protos: {}, totalIn: 0, totalOut: 0, total: 0 };
-    }
-    return slots().find(s => s.slot === sel()) ?? slots()[slots().length - 1];
+    const d = liveDetail();
+    if (d) return apiDetailToSlotData(d);
+    const s = slots().find(x => x.slot === sel());
+    return s ?? { slot: 0, protos: {}, totalIn: 0, totalOut: 0, total: 0 };
   });
   const slotDetail = createMemo((): FlowTimePoint[] => {
-    if (isLive()) {
-      const d = liveDetail();
-      return d ? deriveFlowTimeSeries(d.buckets) : [];
-    }
-    const sd = slots().find(s => s.slot === sel()) ?? slots()[slots().length - 1];
-    return genSlotDetail(sd, sel());
+    const d = liveDetail();
+    return d ? deriveFlowTimeSeries(d.buckets) : [];
   });
 
   const flowBreakdown = createMemo((): FlowRow[] => {
-    if (isLive() && liveDetail()) return deriveFlows(liveDetail()!.breakdown);
-    const sd = selData();
-    const byFlow = new Map<string, FlowRow>();
-    const childMap = new Map<string, Map<string, FlowChild>>();
-    for (const [pk, pv] of Object.entries(sd.protos)) {
-      for (const [tk, tv] of Object.entries(pv.topics)) {
-        if (tv.i === 0 && tv.e === 0) continue;
-        const flow = groupTopic(tk);
-        const rawTopic = normalizeTopic(tk);
-        let entry = byFlow.get(flow);
-        if (!entry) {
-          entry = { flow, protocol: pk, dataIn: 0, dataOut: 0, bleedIn: 0, bleedOut: 0, bleedByDist: {}, control: {}, totalIn: 0, totalOut: 0, children: [] };
-          byFlow.set(flow, entry);
-          childMap.set(flow, new Map());
-        }
-        entry.dataIn += tv.i;
-        entry.dataOut += tv.e;
-        entry.totalIn += tv.i;
-        entry.totalOut += tv.e;
-        if (rawTopic !== flow) {
-          const cm = childMap.get(flow)!;
-          let child = cm.get(rawTopic);
-          if (!child) {
-            child = { topic: rawTopic, protocol: pk, dataIn: 0, dataOut: 0, bleedIn: 0, bleedOut: 0, bleedByDist: {}, control: {}, totalIn: 0, totalOut: 0 };
-            cm.set(rawTopic, child);
-          }
-          child.dataIn += tv.i; child.dataOut += tv.e;
-          child.totalIn += tv.i; child.totalOut += tv.e;
-        }
-      }
-    }
-    for (const [flow, entry] of byFlow) {
-      const cm = childMap.get(flow);
-      if (cm && cm.size > 0) entry.children = [...cm.values()].sort((a, b) => (b.totalIn + b.totalOut) - (a.totalIn + a.totalOut));
-    }
-    return [...byFlow.values()]
-      .filter(f => f.totalIn + f.totalOut > 0)
-      .sort((a, b) => (b.totalIn + b.totalOut) - (a.totalIn + a.totalOut));
+    const d = liveDetail();
+    return d ? deriveFlows(d.breakdown) : [];
   });
 
   const activeControlKinds = createMemo(() => {
@@ -1276,8 +1067,8 @@ export default function App() {
   });
 
   const protocolBreakdown = createMemo((): ProtocolRow[] => {
-    if (isLive() && liveDetail()) return deriveProtocols(liveDetail()!.breakdown);
-    return []; // Sim mode doesn't produce protocol-level overhead
+    const d = liveDetail();
+    return d ? deriveProtocols(d.breakdown) : [];
   });
 
   const activeProtoControlKinds = createMemo(() => {
@@ -1296,9 +1087,8 @@ export default function App() {
     }
   });
 
-  // ── WebSocket connection (live mode only) ───────────────────────────
+  // ── WebSocket connection ────────────────────────────────────────────
   createEffect(() => {
-    if (!isLive()) { setWsStatus("disconnected"); return; }
     const source = activeSource();
     if (!source) return;
     let closed = false;
@@ -1335,7 +1125,7 @@ export default function App() {
         fetch(apiUrl("/api/slots"))
           .then(r => r.ok ? r.json() as Promise<{ slots: ApiSlotSummary[] }> : null)
           .then(data => {
-            if (!data || !isLive()) return;
+            if (!data) return;
             const items = (data.slots ?? []).map(apiSummaryToSlotData);
             setLiveSlots(items);
             if (items.length > 0) setSel(items[0].slot);
@@ -1373,9 +1163,8 @@ export default function App() {
     });
   });
 
-  // ── Slot detail fetch (live mode) ─────────────────────────────────
+  // ── Slot detail fetch ──────────────────────────────────────────────
   createEffect(() => {
-    if (!isLive()) return;
     const s = sel();
     if (s === 0) return;
     setLiveDetail(null);
@@ -1385,9 +1174,9 @@ export default function App() {
       .catch(e => console.warn("[wiretap] slot detail fetch failed:", e));
   });
 
-  // ── Live peers fetch ─────────────────────────────────────────────
+  // ── Peers fetch ────────────────────────────────────────────────────
   createEffect(() => {
-    if (!isLive() || view() !== "peers" || !activeSource()) return;
+    if (view() !== "peers" || !activeSource()) return;
     const fetchPeers = () => {
       fetch(apiUrl("/api/peers"))
         .then(r => r.ok ? r.json() : null)
@@ -1397,18 +1186,6 @@ export default function App() {
     fetchPeers();
     const iv = setInterval(fetchPeers, 5000);
     onCleanup(() => clearInterval(iv));
-  });
-
-  // Sim tick timer (pauses when tab is hidden, only in sim mode)
-  createEffect(() => {
-    if (!live() || isLive()) return;
-    let iv: number;
-    const start = () => { iv = window.setInterval(() => setTick(t => t + 1), 5000); };
-    const stop = () => window.clearInterval(iv);
-    const onVis = () => { document.hidden ? stop() : start(); };
-    if (!document.hidden) start();
-    document.addEventListener("visibilitychange", onVis);
-    onCleanup(() => { stop(); document.removeEventListener("visibilitychange", onVis); });
   });
 
   // Keyboard handler
@@ -1427,16 +1204,9 @@ export default function App() {
           const i = slots().findIndex(x => x.slot === s);
           return i > 0 ? slots()[i - 1].slot : s;
         });
-      } else if (e.key === "l") { setLive(x => !x); }
-      else if (e.key === "1") { setView("slots"); }
+      } else if (e.key === "1") { setView("slots"); }
       else if (e.key === "2") { setView("peers"); }
       else if (e.key === "t") { setTheme(t => t === "dark" ? "light" : "dark"); }
-      else if (e.key === "m") {
-        const next = dataMode() === "sim" ? "live" : "sim";
-        setDataMode(next);
-        if (next === "sim") setSel(HEAD);
-        else setSel(0);
-      }
       else if (e.key === "/" && !searchMode()) {
         e.preventDefault();
         setSearchMode(true);
@@ -1451,14 +1221,7 @@ export default function App() {
   });
 
   const handleCmd = (id: string) => {
-    if (id === "live") setLive(x => !x);
-    else if (id === "theme") setTheme(t => t === "dark" ? "light" : "dark");
-    else if (id === "mode") {
-      const next = dataMode() === "sim" ? "live" : "sim";
-      setDataMode(next);
-      if (next === "sim") setSel(HEAD);
-      else setSel(0);
-    }
+    if (id === "theme") setTheme(t => t === "dark" ? "light" : "dark");
     else if (id.startsWith("view:")) setView(id.split(":")[1] as ViewId);
   };
 
@@ -1489,46 +1252,15 @@ export default function App() {
         <span style={{ "font-family": "var(--m)", "font-size": "var(--t-lg)", "font-weight": "700", color: "var(--hi)", "letter-spacing": "var(--track-caps)" }}>ETHEREUM WIRETAP</span>
         <div style={{ flex: 1 }} />
 
-        {/* Data mode toggle */}
-        <button
-          onClick={() => {
-            const next = dataMode() === "sim" ? "live" : "sim";
-            setDataMode(next);
-            if (next === "sim") setSel(HEAD);
-            else setSel(0);
-          }}
-          aria-label="Toggle data source"
-          style={{ display: "flex", "align-items": "center", gap: "4px", cursor: "pointer", background: "none", border: "none", padding: 0 }}
-        >
-          <span style={{ "font-family": "var(--m)", "font-size": "var(--t-sm)", "font-weight": "700", color: isLive() ? "var(--fg)" : "var(--3)" }}>
-            {isLive() ? "LIVE" : "SIM"}
-          </span>
-          <Kbd>m</Kbd>
-        </button>
-
-        {/* Connection status (live mode) / play-pause (sim mode) */}
-        <Show when={isLive()}>
-          <span style={{
-            width: "6px", height: "6px",
-            background: wsStatus() === "connected" ? liveColor() : "var(--3)",
-            animation: wsStatus() === "connected" ? "blink 1.8s step-end infinite" : "none",
-          }} />
-          <span style={{ "font-family": "var(--m)", "font-size": "var(--t-sm)", color: wsStatus() === "connected" ? liveColor() : "var(--3)" }}>
-            {wsStatus()}
-          </span>
-        </Show>
-        <Show when={!isLive()}>
-          <button onClick={() => setLive(!live())} aria-label={live() ? "Pause" : "Resume"} style={{ display: "flex", "align-items": "center", gap: "4px", cursor: "pointer", background: "none", border: "none", padding: 0 }}>
-            <span style={{
-              width: "6px", height: "6px",
-              background: live() ? liveColor() : "var(--3)",
-              animation: live() ? "blink 1.8s step-end infinite" : "none",
-            }} />
-            <span style={{ "font-family": "var(--m)", "font-size": "var(--t-sm)", color: live() ? liveColor() : "var(--3)" }}>
-              {live() ? "LIVE" : "PAUSED"}
-            </span>
-          </button>
-        </Show>
+        {/* Connection status */}
+        <span style={{
+          width: "6px", height: "6px",
+          background: wsStatus() === "connected" ? liveColor() : "var(--3)",
+          animation: wsStatus() === "connected" ? "blink 1.8s step-end infinite" : "none",
+        }} />
+        <span style={{ "font-family": "var(--m)", "font-size": "var(--t-sm)", color: wsStatus() === "connected" ? liveColor() : "var(--3)" }}>
+          {wsStatus()}
+        </span>
 
         <Show when={peerCount() !== null}>
           <span style={{ "font-family": "var(--m)", "font-size": "var(--t-sm)", color: "var(--3)" }}>
@@ -1761,66 +1493,31 @@ export default function App() {
 
             {/* ── Peers view ── */}
             <Show when={view() === "peers"}>
-              <Show when={!isLive()} fallback={
-                <>
-                  <For each={livePeers()}>
-                    {(p) => (
-                      <div style={{
-                        padding: "6px 12px", display: "flex", "align-items": "center",
-                        gap: "8px", "border-bottom": "1px solid var(--1)",
-                      }}
-                        onMouseEnter={(e) => { e.currentTarget.style.background = "var(--hover)"; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-                      >
-                        <div style={{ flex: 1, "min-width": 0 }}>
-                          <div style={{
-                            "font-family": "var(--m)", "font-size": "var(--t-md)", color: "var(--fg)",
-                            overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap",
-                          }}>{p.peer_id.length > 20 ? p.peer_id.slice(0, 8) + "..." + p.peer_id.slice(-8) : p.peer_id}</div>
-                          <div style={{ "font-family": "var(--m)", "font-size": "var(--t-sm)", color: "var(--3)", "margin-top": "1px" }}>
-                            {p.connections?.length ?? 0} conn &middot; {p.connections?.[0]?.direction ?? "unknown"} &middot; {p.connections?.[0]?.remote_addr ?? ""}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </For>
-                  <Show when={livePeers().length === 0}>
-                    <div style={{ padding: "24px 12px", "text-align": "center", color: "var(--3)", "font-family": "var(--m)", "font-size": "var(--t-md)" }}>
-                      No peers connected
-                    </div>
-                  </Show>
-                </>
-              }>
-                {peers().map((p, i) => (
-                  <div
-                    style={{
-                      padding: "6px 12px", display: "flex", "align-items": "center",
-                      gap: "8px", "border-bottom": "1px solid var(--1)",
-                    }}
+              <For each={livePeers()}>
+                {(p) => (
+                  <div style={{
+                    padding: "6px 12px", display: "flex", "align-items": "center",
+                    gap: "8px", "border-bottom": "1px solid var(--1)",
+                  }}
                     onMouseEnter={(e) => { e.currentTarget.style.background = "var(--hover)"; }}
                     onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
                   >
-                    <span style={{
-                      "font-family": "var(--m)", "font-size": "var(--t-sm)", color: "var(--3)",
-                      width: "16px", "text-align": "right", "flex-shrink": 0,
-                    }}>{i + 1}</span>
-                    <span style={{ width: "5px", height: "5px", background: pc(p.topProto), "flex-shrink": 0 }} />
                     <div style={{ flex: 1, "min-width": 0 }}>
                       <div style={{
                         "font-family": "var(--m)", "font-size": "var(--t-md)", color: "var(--fg)",
                         overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap",
-                      }}>{p.id.slice(9)}</div>
-                      <div style={{ "font-family": "var(--m)", "font-size": "var(--t-sm)", color: "var(--3)", "margin-top": "1px", "line-height": "1.4" }}>
-                        {p.client} &middot; {p.msgs} msgs
+                      }}>{p.peer_id.length > 20 ? p.peer_id.slice(0, 8) + "..." + p.peer_id.slice(-8) : p.peer_id}</div>
+                      <div style={{ "font-family": "var(--m)", "font-size": "var(--t-sm)", color: "var(--3)", "margin-top": "1px" }}>
+                        {p.connections?.length ?? 0} conn &middot; {p.connections?.[0]?.direction ?? "unknown"} &middot; {p.connections?.[0]?.remote_addr ?? ""}
                       </div>
                     </div>
-                    <Spark data={p.spark} w={48} h={14} color={pc(p.topProto)} />
-                    <div style={{ "font-family": "var(--m)", "font-size": "var(--t-sm)", "text-align": "right", "flex-shrink": 0, width: "44px" }}>
-                      <div style={{ color: inColor() }}>{(p.inn / 1024).toFixed(1)}</div>
-                      <div style={{ color: outColor(), "font-size": "var(--t-xs)" }}>{(p.out / 1024).toFixed(1)}</div>
-                    </div>
                   </div>
-                ))}
+                )}
+              </For>
+              <Show when={livePeers().length === 0}>
+                <div style={{ padding: "24px 12px", "text-align": "center", color: "var(--3)", "font-family": "var(--m)", "font-size": "var(--t-md)" }}>
+                  No peers connected
+                </div>
               </Show>
             </Show>
           </div>
@@ -1832,8 +1529,6 @@ export default function App() {
             display: "flex", gap: "8px", "flex-shrink": 0, "flex-wrap": "wrap",
           }}>
             <span><Kbd>j</Kbd><Kbd>k</Kbd> nav</span>
-            <span><Kbd>l</Kbd> live</span>
-            <span><Kbd>m</Kbd> mode</span>
             <span><Kbd>t</Kbd> theme</span>
             <span><Kbd>/</Kbd> search</span>
           </div>
