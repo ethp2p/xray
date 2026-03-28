@@ -86,6 +86,202 @@ func TestIntrospectorUnixIngestHTTPAndWS(t *testing.T) {
 	}, 5*time.Second, 100*time.Millisecond)
 }
 
+func TestMultiSourceIsolation(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	fixture := startIntrospectorFixture(t, ctx)
+
+	base1, err := libp2p.New()
+	require.NoError(t, err)
+	defer base1.Close()
+	ih1, err := instrument.Wrap(base1,
+		instrument.WithUnixSocket(fixture.socketPath),
+		instrument.WithClientName("client-1"),
+		instrument.WithWaitForAttach(),
+	)
+	require.NoError(t, err)
+	defer ih1.Close()
+
+	base2, err := libp2p.New()
+	require.NoError(t, err)
+	defer base2.Close()
+	ih2, err := instrument.Wrap(base2,
+		instrument.WithUnixSocket(fixture.socketPath),
+		instrument.WithClientName("client-2"),
+		instrument.WithWaitForAttach(),
+	)
+	require.NoError(t, err)
+	defer ih2.Close()
+
+	require.Eventually(t, func() bool {
+		resp, err := http.Get(fixture.baseURL + "/api/sources")
+		if err != nil {
+			return false
+		}
+		defer resp.Body.Close()
+		var payload struct {
+			Sources []struct {
+				SourceID   string `json:"source_id"`
+				ClientName string `json:"client_name"`
+			} `json:"sources"`
+		}
+		json.NewDecoder(resp.Body).Decode(&payload)
+		return len(payload.Sources) >= 2
+	}, 5*time.Second, 200*time.Millisecond, "expected 2 sources")
+
+	resp, err := http.Get(fixture.baseURL + "/api/sources")
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	var sourcesPayload struct {
+		Sources []struct {
+			ClientName string `json:"client_name"`
+		} `json:"sources"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&sourcesPayload))
+	names := make(map[string]bool)
+	for _, s := range sourcesPayload.Sources {
+		names[s.ClientName] = true
+	}
+	require.True(t, names["client-1"], "client-1 should be registered")
+	require.True(t, names["client-2"], "client-2 should be registered")
+}
+
+func TestPeersEndpoint(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	fixture := startIntrospectorFixture(t, ctx)
+
+	base1, err := libp2p.New()
+	require.NoError(t, err)
+	defer base1.Close()
+	ih1, err := instrument.Wrap(base1,
+		instrument.WithUnixSocket(fixture.socketPath),
+		instrument.WithClientName("test-probe"),
+		instrument.WithWaitForAttach(),
+	)
+	require.NoError(t, err)
+	defer ih1.Close()
+
+	peer1, err := libp2p.New()
+	require.NoError(t, err)
+	defer peer1.Close()
+
+	ih1.SetStreamHandler(protocol.ID("/echo/1.0.0"), echoHandler)
+	connectHosts(t, ih1, peer1)
+
+	var sourceID string
+	require.Eventually(t, func() bool {
+		resp, err := http.Get(fixture.baseURL + "/api/sources")
+		if err != nil {
+			return false
+		}
+		defer resp.Body.Close()
+		var payload struct {
+			Sources []struct {
+				SourceID string `json:"source_id"`
+			} `json:"sources"`
+		}
+		json.NewDecoder(resp.Body).Decode(&payload)
+		if len(payload.Sources) > 0 {
+			sourceID = payload.Sources[0].SourceID
+			return true
+		}
+		return false
+	}, 5*time.Second, 200*time.Millisecond)
+
+	require.Eventually(t, func() bool {
+		resp, err := http.Get(fixture.baseURL + "/api/peers?source=" + url.QueryEscape(sourceID))
+		if err != nil {
+			return false
+		}
+		defer resp.Body.Close()
+		var payload struct {
+			Peers []struct {
+				PeerID      string `json:"peer_id"`
+				Connections []struct {
+				} `json:"connections"`
+			} `json:"peers"`
+		}
+		json.NewDecoder(resp.Body).Decode(&payload)
+		return len(payload.Peers) > 0 && len(payload.Peers[0].Connections) > 0
+	}, 5*time.Second, 200*time.Millisecond, "expected at least one peer with connections")
+}
+
+func TestWebSocketSourceScoping(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	fixture := startIntrospectorFixture(t, ctx)
+
+	base1, err := libp2p.New()
+	require.NoError(t, err)
+	defer base1.Close()
+	ih1, err := instrument.Wrap(base1,
+		instrument.WithUnixSocket(fixture.socketPath),
+		instrument.WithClientName("ws-test"),
+		instrument.WithWaitForAttach(),
+	)
+	require.NoError(t, err)
+	defer ih1.Close()
+
+	var sourceID string
+	require.Eventually(t, func() bool {
+		resp, err := http.Get(fixture.baseURL + "/api/sources")
+		if err != nil {
+			return false
+		}
+		defer resp.Body.Close()
+		var payload struct {
+			Sources []struct {
+				SourceID string `json:"source_id"`
+			} `json:"sources"`
+		}
+		json.NewDecoder(resp.Body).Decode(&payload)
+		if len(payload.Sources) > 0 {
+			sourceID = payload.Sources[0].SourceID
+			return true
+		}
+		return false
+	}, 5*time.Second, 200*time.Millisecond)
+
+	wsURL, err := url.Parse(fixture.baseURL)
+	require.NoError(t, err)
+	wsURL.Scheme = "ws"
+	wsURL.Path = "/api/ws"
+	wsURL.RawQuery = "source=" + url.QueryEscape(sourceID)
+	wsConn, _, err := websocket.DefaultDialer.Dial(wsURL.String(), nil)
+	require.NoError(t, err)
+	defer wsConn.Close()
+	wsConn.SetReadDeadline(time.Now().Add(15 * time.Second))
+
+	var msg map[string]any
+	require.NoError(t, wsConn.ReadJSON(&msg))
+	require.Equal(t, "snapshot", msg["type"])
+
+	peer1, err := libp2p.New()
+	require.NoError(t, err)
+	defer peer1.Close()
+	ih1.SetStreamHandler(protocol.ID("/echo/1.0.0"), echoHandler)
+	connectHosts(t, ih1, peer1)
+	s, err := peer1.NewStream(ctx, ih1.ID(), protocol.ID("/echo/1.0.0"))
+	require.NoError(t, err)
+	s.Write([]byte("hello"))
+	s.CloseWrite()
+	io.ReadAll(s)
+	s.Close()
+
+	require.Eventually(t, func() bool {
+		wsConn.SetReadDeadline(time.Now().Add(2 * time.Second))
+		var update map[string]any
+		if err := wsConn.ReadJSON(&update); err != nil {
+			return false
+		}
+		return update["type"] == "slot_batch"
+	}, 10*time.Second, 100*time.Millisecond, "expected to receive a slot_batch WS message")
+}
+
 func TestIntrospectorGossipSubPublishE2E(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
