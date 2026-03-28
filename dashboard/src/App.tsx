@@ -1716,7 +1716,7 @@ export default function App() {
           }}>
             <span style={{
               "font-family": "var(--m)", "font-size": "var(--t-md)", "font-weight": "700",
-              color: "var(--3)", "letter-spacing": "var(--track-caps)",
+              color: "var(--fg)", "letter-spacing": "var(--track-caps)",
             }}>SLOT {sel()}</span>
             <span style={{ "font-family": "var(--m)", "font-size": "var(--t-md)", color: "var(--3)" }}>
               <span style={{ color: inColor() }}>{"\u2193"}{(selData().totalIn / 1024).toFixed(1)} KiB</span>
