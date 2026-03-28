@@ -785,12 +785,14 @@ function StreamGraph(props: {
   const baseKey = (k: string) => k.replace(/-(?:in|out)$/, "");
 
   const [mousePos, setMousePos] = createSignal<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [hoverFrac, setHoverFrac] = createSignal<number | null>(null);
 
   const handleMouseMove = (e: MouseEvent) => {
     const rect = svgRef?.getBoundingClientRect();
     if (!rect) return;
-    const x = (e.clientX - rect.left) / rect.width;
-    setHoverX(Math.max(0, Math.min(Math.round(x * (n() - 1)), n() - 1)));
+    const frac = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1));
+    setHoverFrac(frac);
+    setHoverX(Math.max(0, Math.min(Math.round(frac * (n() - 1)), n() - 1)));
     setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
   };
 
@@ -806,9 +808,9 @@ function StreamGraph(props: {
           width="100%" height="100%"
           viewBox={`0 0 ${stream().W} ${stream().H}`}
           preserveAspectRatio="none"
-          style={{ display: "block", cursor: "crosshair", flex: 1, "min-height": 0 }}
+          style={{ display: "block", cursor: "default", flex: 1, "min-height": 0 }}
           onMouseMove={handleMouseMove}
-          onMouseLeave={() => { setHoverX(null); setHoveredLayer(null); props.onFlowHover(null); }}
+          onMouseLeave={() => { setHoverX(null); setHoverFrac(null); setHoveredLayer(null); props.onFlowHover(null); }}
         >
           <defs>
             <pattern id="bleed-hatch" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
@@ -868,7 +870,7 @@ function StreamGraph(props: {
                 {tint && <path d={p.d} fill={tint} opacity={0.9} />}
                 <path
                   d={p.d} fill="url(#bleed-hatch)" opacity={isHl ? 0.9 : 0.8}
-                  style={{ cursor: "crosshair" }}
+                  style={{ cursor: "default" }}
                   onMouseEnter={() => { setHoveredLayer(flowKey); props.onFlowHover(flowKey); }}
                   onMouseLeave={() => { setHoveredLayer(null); props.onFlowHover(null); }}
                 />
@@ -917,12 +919,25 @@ function StreamGraph(props: {
           })()}
 
           {/* hover crosshair */}
-          <Show when={hoverX() !== null}>
-            <line
-              x1={(hoverX()! / (n() - 1)) * stream().W} y1={0}
-              x2={(hoverX()! / (n() - 1)) * stream().W} y2={stream().H}
-              stroke="var(--fg)" stroke-width={0.5} opacity={0.25} stroke-dasharray="3,3"
-            />
+          <Show when={hoverFrac() !== null}>
+            {(() => {
+              const xPos = () => hoverFrac()! * stream().W;
+              const timeMs = () => hoverFrac()! * SLOT_DURATION_MS;
+              const timeFmt = () => (timeMs() / 1000).toFixed(2) + "s";
+              return (
+                <>
+                  <line
+                    x1={xPos()} y1={0} x2={xPos()} y2={stream().H}
+                    stroke="var(--fg)" stroke-width={0.5} opacity={0.15}
+                  />
+                  <text
+                    x={xPos()} y={stream().H - 4}
+                    fill="var(--3)" font-size="8" font-family="var(--m)"
+                    text-anchor="middle" opacity={0.5}
+                  >{timeFmt()}</text>
+                </>
+              );
+            })()}
           </Show>
         </svg>
 
