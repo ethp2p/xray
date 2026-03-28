@@ -2,7 +2,9 @@
 
 Transparent libp2p network instrumentation with real-time analysis dashboard for Ethereum consensus layer research.
 
-Wiretap wraps any `go-libp2p` host to capture stream-level traffic without modifying application code. A separate backend process decodes gossipsub messages, extracts SSZ slot numbers, and aggregates per-slot bandwidth breakdowns. A Solid.js dashboard renders the data in real time.
+**Live dashboard**: [xray.ethp2p.dev](https://xray.ethp2p.dev)
+
+Wiretap wraps any `go-libp2p` host to capture stream-level traffic without modifying application code. A separate backend process decodes gossipsub messages, extracts SSZ slot numbers, and aggregates per-slot bandwidth breakdowns. A Solid.js dashboard ("Ethereum Xray") renders the data in real time.
 
 ## Architecture
 
@@ -33,7 +35,7 @@ Wiretap wraps any `go-libp2p` host to capture stream-level traffic without modif
 └─────────────────────────────────────────────────────┼───────┘
                                                       │
                                               ┌───────v───────┐
-                                              │   Dashboard    │
+                                              │  Xray Dashboard│
                                               │  (Solid.js)    │
                                               │  localhost:5173 │
                                               └───────────────┘
@@ -98,7 +100,7 @@ proto/                  Protobuf definitions and generated code
   ingest/               Ingest protocol messages (Envelope, ClientHello, etc.)
 cmd/wiretap/            Backend binary entrypoint
 itest/                  Integration tests (gossipsub decoding, introspector E2E)
-dashboard/              Solid.js web dashboard
+dashboard/              Solid.js web dashboard ("Ethereum Xray")
 docs/                   Specs and plans
 ```
 

@@ -1,6 +1,6 @@
 # Wiretap
 
-Go instrumentation library for libp2p with a Solid.js real-time dashboard for Ethereum consensus layer analysis.
+Go instrumentation library for libp2p with a Solid.js real-time dashboard ("Ethereum Xray") for Ethereum consensus layer analysis. Live at [xray.ethp2p.dev](https://xray.ethp2p.dev).
 
 ## Project structure
 
@@ -14,10 +14,11 @@ Go instrumentation library for libp2p with a Solid.js real-time dashboard for Et
 │   └── ingest/
 ├── cmd/wiretap/            # Backend binary entrypoint
 ├── itest/                  # Integration tests
-└── dashboard/              # Solid.js web dashboard
-    ├── src/App.tsx          # Entire UI (~1800 lines, single file)
+└── dashboard/              # Solid.js web dashboard ("Ethereum Xray")
+    ├── src/App.tsx          # Entire UI (~2100 lines, single file)
     ├── src/index.css         # CSS reset, type scale, animations
     ├── src/main.tsx          # Solid.js render entrypoint
+    ├── public/              # Static assets (favicon, OG image, Iosevka woff2)
     └── vite.config.ts        # Vite dev server, proxies /api to :9100
 ```
 
@@ -69,7 +70,7 @@ Vite proxies `/api/*` and `/ws` to `localhost:9100` (the backend).
 | `--t-md` | 13px | Primary data, slot numbers, totals |
 | `--t-lg` | 16px | Section headers, title |
 
-All text uses Iosevka monospace (`var(--m)`). Font loaded from jsDelivr CDN.
+All text uses Iosevka monospace (`var(--m)`). Font self-hosted as woff2 in `public/iosevka-400.woff2` with `local()` fallback.
 
 ### Theme system
 
@@ -80,7 +81,7 @@ Two themes (dark/light) defined as `THEME_VARS` in App.tsx. CSS custom propertie
 - `--sel-bg`, `--sel-border`, `--hover`: selection and interaction states
 - `--proto-gsub`, `--proto-reqr`, `--proto-dv5`, `--proto-eth`: protocol colors
 
-Flow colors use `topicColor()` which assigns stable HSL hues via string hashing. Known topics get fixed hues from `TOPIC_HUES`; unknown topics get a hash-based fallback.
+Flow colors use `topicColor()` which assigns stable HSL hues via `TOPIC_HUES`. Key assignments: beacon_block=orange(30), attestation=cyan(195), beacon_aggregate_and_proof=purple(275), blob_sidecar=teal(140), data_column_sidecar=green(100), sync_committee_contribution_and_proof=yellow(55). Unknown topics get a hash-based fallback hue.
 
 ### Data model
 
@@ -92,10 +93,7 @@ Flow colors use `topicColor()` which assigns stable HSL hues via string hashing.
 
 ### SIM vs LIVE mode
 
-- **SIM** (`dataMode === "sim"`): Mock data from seeded RNG. No backend needed. Auto-ticks every 5s.
-- **LIVE** (`dataMode === "live"`): WebSocket to `/api/ws` with 120ms client-side batching. REST fetches for slot list and detail. Slot selection triggers `/api/slots/:id` fetch.
-
-Toggle with `m` key or command palette.
+- **LIVE**: WebSocket to `/api/ws` with 120ms client-side batching. REST fetches for slot list and detail. Slot selection triggers `/api/slots/:id` fetch.
 
 ### Key patterns
 
@@ -103,8 +101,11 @@ Toggle with `m` key or command palette.
 - Tooltip follows cursor via `mousePos` signal, clamped to chart bounds
 - Bleed overlay paths have their own mouse events for hover detection
 - Highlighted flow's SVG paths sorted to render last (SVG z-order = document order)
-- `computeDiverging` is generic over data type via accessor functions
+- `computeDiverging` is generic over data type via accessor functions; returns `ceil` and `scale` for reuse by hit testing and y-axis ticks
 - Protocol overhead separated from flows by checking `isGossipProtocol()`
+- Chart legend is fixed (not data-driven), split into four sections: Broadcast, RPC, Overhead, Markers
+- Y-axis ceilings and ticks are always powers of two (8 KiB through 64 MiB)
+- Direction labels (RCVD/SENT) rendered on both left and right edges at z-index 5
 
 ## Go backend
 
