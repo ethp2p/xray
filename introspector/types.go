@@ -76,5 +76,3 @@ type FinalizedSlot struct {
 	Detail   SlotDetail
 }
 
-// Storage is a placeholder for the persistence layer (Task 6).
-type Storage struct{}
