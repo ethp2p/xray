@@ -29,6 +29,7 @@ type Server struct {
 	processor *Processor
 	registry  *SourceRegistry
 	storage   *Storage
+	staticDir string
 
 	mu      sync.Mutex
 	clients map[*websocket.Conn]*wsClient
@@ -59,8 +60,14 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/peers", s.handlePeers)
 	mux.HandleFunc("/api/search", s.handleSearch)
 	mux.HandleFunc("/api/ws", s.handleWS)
+	if s.staticDir != "" {
+		fs := http.FileServer(http.Dir(s.staticDir))
+		mux.Handle("/", fs)
+	}
 	return mux
 }
+
+func (s *Server) SetStaticDir(dir string) { s.staticDir = dir }
 
 func (s *Server) Serve(l net.Listener) error {
 	return http.Serve(l, s.Handler())

@@ -22,6 +22,7 @@ func main() {
 		secondsPerSlot = flag.Uint64("seconds-per-slot", 12, "Beacon chain seconds per slot")
 		dataDir        = flag.String("data-dir", defaultDataDir(), "Persistence directory for slot data")
 		retentionDays  = flag.Int("retention-days", 30, "Slot retention period in days")
+		staticDir      = flag.String("static-dir", "", "Serve dashboard static files from this directory")
 	)
 	flag.Parse()
 
@@ -93,6 +94,9 @@ func main() {
 	}()
 
 	server := introspector.NewServer(processor, registry, storage)
+	if *staticDir != "" {
+		server.SetStaticDir(*staticDir)
+	}
 	listener, err := net.Listen("tcp", *listenAddr)
 	if err != nil {
 		log.Fatalf("listen failed: %v", err)
