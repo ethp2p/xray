@@ -423,6 +423,16 @@ const TICK_MS = 500;
 const POINTS_PER_SLOT = SLOT_DURATION_MS / TICK_MS + 1;
 const LIVE_SLOTS_FLUSH_MS = 120;
 
+const KB = 1024, MB = 1048576;
+const Y_CEILINGS = [
+  10*KB, 20*KB, 50*KB, 100*KB, 200*KB, 500*KB,
+  1*MB, 2*MB, 5*MB, 10*MB, 20*MB, 50*MB,
+];
+function snapCeiling(v: number): number {
+  for (const c of Y_CEILINGS) { if (c >= v) return c; }
+  return Y_CEILINGS[Y_CEILINGS.length - 1];
+}
+
 // ── Diverging chart computation ─────────────────────────────────────────
 
 type Layer = { key: string; color: string; label: string };
@@ -450,7 +460,8 @@ function computeDiverging<T>(
     for (const l of layers) { up += getOut(pt, l.key); down += getIn(pt, l.key); }
     maxVal = Math.max(maxVal, up, down);
   }
-  const scale = (mid - pad) / maxVal;
+  const ceil = snapCeiling(maxVal);
+  const scale = (mid - pad) / ceil;
 
   const paths: StreamPath[] = [];
   const bleedPaths: StreamPath[] = [];
@@ -839,7 +850,7 @@ function StreamGraph(props: {
               <path
                 d={p.d} fill={p.color}
                 opacity={hl === null ? streamOp() : hl === baseKey(p.key) ? 0.9 : dimOp()}
-                style={{ transition: "opacity 0.15s" }}
+                style={{ transition: "opacity 0.15s, d 0.4s ease" }}
                 onMouseEnter={() => { setHoveredLayer(baseKey(p.key)); props.onFlowHover(baseKey(p.key)); }}
                 onMouseLeave={() => { setHoveredLayer(null); props.onFlowHover(null); }}
               />
@@ -888,23 +899,19 @@ function StreamGraph(props: {
               for (const l of layers()) { up += getOut(pt, l.key); down += getIn(pt, l.key); }
               maxVal = Math.max(maxVal, up, down);
             }
-            const niceStep = (v: number) => {
-              const mag = Math.pow(10, Math.floor(Math.log10(v)));
-              const r = v / mag;
-              return mag * (r <= 1 ? 1 : r <= 2 ? 2 : r <= 5 ? 5 : 10);
-            };
-            const step = niceStep(maxVal / 3);
-            if (step <= 0) return null;
+            const ceil = snapCeiling(maxVal);
+            const divisions = 5;
+            const step = ceil / divisions;
+            const scale = (mid - pad) / ceil;
+            const fmt = (v: number) => v >= MB ? (v / MB).toFixed(v % MB === 0 ? 0 : 1) + " MiB" : (v / KB).toFixed(v % KB === 0 ? 0 : 0) + " KiB";
             const ticks: number[] = [];
-            for (let v = step; v <= maxVal; v += step) ticks.push(v);
-            const scale = (mid - pad) / maxVal;
-            const fmt = (v: number) => v >= 1048576 ? (v / 1048576).toFixed(1) + "M" : v >= 1024 ? (v / 1024).toFixed(0) + "K" : String(v);
+            for (let i = 1; i <= divisions; i++) ticks.push(i * step);
             return ticks.map(v => (
               <>
-                <line x1={0} y1={mid - v * scale} x2={stream().W} y2={mid - v * scale} stroke="var(--2)" stroke-width={0.3} />
-                <line x1={0} y1={mid + v * scale} x2={stream().W} y2={mid + v * scale} stroke="var(--2)" stroke-width={0.3} />
-                <text x={stream().W - 4} y={mid - v * scale - 3} fill="var(--3)" font-size="9" font-family="var(--m)" text-anchor="end">{fmt(v)}</text>
-                <text x={stream().W - 4} y={mid + v * scale + 10} fill="var(--3)" font-size="9" font-family="var(--m)" text-anchor="end">{fmt(v)}</text>
+                <line x1={0} y1={mid - v * scale} x2={stream().W} y2={mid - v * scale} stroke="var(--2)" stroke-width={0.3} style={{ transition: "y1 0.4s ease, y2 0.4s ease" }} />
+                <line x1={0} y1={mid + v * scale} x2={stream().W} y2={mid + v * scale} stroke="var(--2)" stroke-width={0.3} style={{ transition: "y1 0.4s ease, y2 0.4s ease" }} />
+                <text x={stream().W - 4} y={mid - v * scale - 3} fill="var(--3)" font-size="9" font-family="var(--m)" text-anchor="end" style={{ transition: "y 0.4s ease" }}>{fmt(v)}</text>
+                <text x={stream().W - 4} y={mid + v * scale + 10} fill="var(--3)" font-size="9" font-family="var(--m)" text-anchor="end" style={{ transition: "y 0.4s ease" }}>{fmt(v)}</text>
               </>
             ));
           })()}
