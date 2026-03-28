@@ -1367,7 +1367,7 @@ export default function App() {
         <Show when={followMode() && wsStatus() === "connected"}>
           <span style={{
             "font-family": "var(--m)", "font-size": "var(--t-xs)", color: "var(--3)",
-            border: "1px solid var(--2)", "border-radius": "9px", padding: "1px 8px",
+            border: "1px solid var(--2)", padding: "1px 8px",
           }}>follow mode: on</span>
         </Show>
 
