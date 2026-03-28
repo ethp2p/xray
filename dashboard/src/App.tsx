@@ -448,9 +448,9 @@ function computeDiverging<T>(
   getOut: (pt: T, key: string) => number,
   getBleedIn?: (pt: T, key: string) => number,
   getBleedOut?: (pt: T, key: string) => number,
-): { paths: StreamPath[]; bleedPaths: StreamPath[]; W: number; H: number } {
+): { paths: StreamPath[]; bleedPaths: StreamPath[]; W: number; H: number; ceil: number; scale: number } {
   const n = points.length, k = layers.length;
-  if (!n || !k) return { paths: [], bleedPaths: [], W: 0, H: 0 };
+  if (!n || !k) return { paths: [], bleedPaths: [], W: 0, H: 0, ceil: 0, scale: 0 };
 
   const W = 1000, H = 400;
   const xStep = W / (n - 1 || 1);
@@ -555,7 +555,7 @@ function computeDiverging<T>(
     }
   }
 
-  return { paths, bleedPaths, W, H };
+  return { paths, bleedPaths, W, H, ceil, scale };
 }
 
 function smooth(pts: [number, number][]): string {
@@ -737,15 +737,9 @@ function StreamGraph(props: {
   const getBleedOut = (pt: FlowTimePoint, flow: string): number => pt.flows[flow]?.bleedOut ?? 0;
 
   // Bleed distance tint: color based on max distance bucket present
-  const BLEED_DIST_COLORS: Record<string, string> = {
-    "1": "hsla(0, 40%, 50%, 0.3)",
-    "2": "hsla(0, 60%, 45%, 0.4)",
-    "3": "hsla(0, 80%, 40%, 0.5)",
-    "4+": "hsla(0, 100%, 35%, 0.6)",
-  };
   const BLEED_DIST_KEYS = ["1", "2", "3", "4+"];
+  const BLEED_OPACITY: Record<string, number> = { "1": 0.3, "2": 0.4, "3": 0.5, "4+": 0.6 };
 
-  // Compute the worst (most distant) bleed bucket across all time points for a given flow
   const bleedTintForFlow = (flow: string): string | null => {
     let maxDist = 0;
     for (const pt of props.points) {
@@ -761,7 +755,9 @@ function StreamGraph(props: {
     }
     if (maxDist === 0) return null;
     const key = maxDist >= 4 ? "4+" : String(maxDist);
-    return BLEED_DIST_COLORS[key] ?? null;
+    const h = TOPIC_HUES[flow] ?? 0;
+    const op = BLEED_OPACITY[key] ?? 0.4;
+    return `hsla(${h}, 70%, 30%, ${op})`;
   };
 
   const stream = createMemo(() => computeDiverging(props.points, layers(), getIn, getOut, getBleedIn, getBleedOut));
@@ -802,17 +798,8 @@ function StreamGraph(props: {
 
     const pt = props.points[pi];
     if (!pt) { setHoveredLayer(null); props.onFlowHover(null); return; }
-    const { H } = stream();
+    const { H, scale } = stream();
     const mid = H / 2;
-    const pad = 20;
-    let maxVal = 1;
-    for (const p of props.points) {
-      let up = 0, down = 0;
-      for (const l of layers()) { up += (p.flows[l.key]?.out ?? 0); down += (p.flows[l.key]?.in ?? 0); }
-      maxVal = Math.max(maxVal, up, down);
-    }
-    const ceil = snapCeiling(maxVal);
-    const scale = (mid - pad) / ceil;
     const svgY = yFrac * H;
     let hit: string | null = null;
     if (svgY < mid) {
@@ -937,20 +924,11 @@ function StreamGraph(props: {
 
           {/* y-axis ticks */}
           {(() => {
-            const { H } = stream();
+            const { H, ceil, scale } = stream();
             const mid = H / 2;
-            const pad = 20;
-            let maxVal = 1;
-            for (const pt of props.points) {
-              let up = 0, down = 0;
-              for (const l of layers()) { up += getOut(pt, l.key); down += getIn(pt, l.key); }
-              maxVal = Math.max(maxVal, up, down);
-            }
-            const ceil = snapCeiling(maxVal);
             const divisions = 5;
             const step = ceil / divisions;
-            const scale = (mid - pad) / ceil;
-            const fmt = (v: number) => v >= MB ? (v / MB).toFixed(v % MB === 0 ? 0 : 1) + " MiB" : (v / KB).toFixed(v % KB === 0 ? 0 : 0) + " KiB";
+            const fmt = (v: number) => v >= MB ? (v / MB).toFixed(v % MB === 0 ? 0 : 1) + " MiB" : (v / KB).toFixed(0) + " KiB";
             const ticks: number[] = [];
             for (let i = 1; i <= divisions; i++) ticks.push(i * step);
             return ticks.map(v => (
@@ -1017,10 +995,10 @@ function StreamGraph(props: {
                   const label = e.key === "4+" ? "-4+ slots" : `-${e.key} slot${e.key === "1" ? "" : "s"}`;
                   return (
                     <div style={{ display: "flex", "align-items": "center", gap: "4px", "margin-top": "1px" }}>
-                      <span style={{ width: "6px", height: "6px", "flex-shrink": 0, background: BLEED_DIST_COLORS[e.key], display: "inline-block" }} />
+                      <span style={{ width: "6px", height: "6px", "flex-shrink": 0, background: "var(--3)", display: "inline-block" }} />
                       <span style={{ color: "var(--3)", width: "52px", "font-size": "var(--t-xs)" }}>{label}</span>
                       <div style={{ flex: 1, height: "3px", background: "var(--1)", "min-width": "20px" }}>
-                        <div style={{ height: "100%", background: BLEED_DIST_COLORS[e.key], width: `${Math.min(pct, 100)}%` }} />
+                        <div style={{ height: "100%", background: "var(--3)", width: `${Math.min(pct, 100)}%` }} />
                       </div>
                       <span style={{ color: "var(--3)", "font-size": "var(--t-xs)", width: "40px", "text-align": "right" }}>{fK(total)}</span>
                     </div>
@@ -1099,27 +1077,29 @@ function StreamGraph(props: {
           padding: "6px 8px", display: "flex", "flex-direction": "column", gap: "2px",
           "border-left": "1px solid var(--1)",
         }}>
-          {layers().map(l => (
-            <span
-              onMouseEnter={() => { setHoveredLayer(l.key); props.onFlowHover(l.key); }}
-              onMouseLeave={() => { setHoveredLayer(null); props.onFlowHover(null); }}
-              style={{
-                "font-size": "var(--t-sm)", "font-family": "var(--m)",
-                color: effectiveHighlight() === l.key ? l.color : "var(--3)",
-                cursor: "pointer", transition: "color 0.1s",
-                display: "flex", "align-items": "center", gap: "5px",
-                overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap",
-                padding: "1px 0",
-              }}
-            >
-              <span style={{
-                width: "6px", height: "6px", background: l.color,
-                opacity: effectiveHighlight() === null || effectiveHighlight() === l.key ? 0.8 : 0.2,
-                display: "inline-block", "flex-shrink": 0,
-              }} />
-              {l.label}
-            </span>
-          ))}
+          <For each={layers()}>
+            {(l) => (
+              <span
+                on:mouseenter={() => { setHoveredLayer(l.key); props.onFlowHover(l.key); }}
+                on:mouseleave={() => { setHoveredLayer(null); props.onFlowHover(null); }}
+                style={{
+                  "font-size": "var(--t-sm)", "font-family": "var(--m)",
+                  color: effectiveHighlight() === l.key ? l.color : "var(--3)",
+                  cursor: "pointer", transition: "color 0.1s",
+                  display: "flex", "align-items": "center", gap: "5px",
+                  overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap",
+                  padding: "1px 0",
+                }}
+              >
+                <span style={{
+                  width: "6px", height: "6px", background: l.color,
+                  opacity: effectiveHighlight() === null || effectiveHighlight() === l.key ? 0.8 : 0.2,
+                  display: "inline-block", "flex-shrink": 0,
+                }} />
+                {l.label}
+              </span>
+            )}
+          </For>
           {/* Bleed legend entry */}
           <div style={{ "border-top": "1px solid var(--2)", "margin-top": "4px", "padding-top": "4px" }}>
             <span style={{
@@ -1191,7 +1171,7 @@ export default function App() {
       .catch(() => {});
   });
 
-  const slots = createMemo(() => liveSlots());
+  const slots = liveSlots;
   const selData = createMemo(() => {
     const d = liveDetail();
     if (d) return apiDetailToSlotData(d);
@@ -1946,50 +1926,56 @@ export default function App() {
                                 </td>
                                 <td style={{ padding: "5px 6px", "border-right": "1px solid var(--1)" }}>{chip(row.protocol)}</td>
                                 <td style={{ padding: "5px 10px", "text-align": "right", color: "var(--fg)", "white-space": "nowrap", "border-left": "2px solid var(--2)", "border-right": "1px solid var(--1)" }}>{fmtPair(row.dataIn, row.dataOut)}</td>
-                                {activeControlKinds().map((kind, i) => {
-                                  const cv = row.control[kind];
-                                  const hasData = cv && (cv.in > 0 || cv.out > 0);
-                                  return (
-                                    <td style={{
-                                      padding: "5px 8px", "text-align": "right",
-                                      color: hasData ? "var(--3)" : "var(--2)", "font-size": "var(--t-sm)",
-                                      "white-space": "nowrap",
-                                      "border-left": i === 0 ? "2px solid var(--2)" : "1px solid var(--1)",
-                                    }}>{hasData ? fmtPair(cv!.in, cv!.out) : "-"}</td>
-                                  );
-                                })}
+                                <For each={activeControlKinds()}>
+                                  {(kind, i) => {
+                                    const cv = row.control[kind];
+                                    const hasData = cv && (cv.in > 0 || cv.out > 0);
+                                    return (
+                                      <td style={{
+                                        padding: "5px 8px", "text-align": "right",
+                                        color: hasData ? "var(--3)" : "var(--2)", "font-size": "var(--t-sm)",
+                                        "white-space": "nowrap",
+                                        "border-left": i() === 0 ? "2px solid var(--2)" : "1px solid var(--1)",
+                                      }}>{hasData ? fmtPair(cv!.in, cv!.out) : "-"}</td>
+                                    );
+                                  }}
+                                </For>
                                 <td style={{ padding: "5px 10px", "text-align": "right", "white-space": "nowrap", background: "rgba(232, 118, 118, 0.06)", "border-left": "2px solid var(--2)", color: row.bleedIn + row.bleedOut > 50 ? "var(--fg)" : "var(--2)" }}>{fmtPair(row.bleedIn, row.bleedOut)}</td>
                               </tr>
 
                               {/* Level 2: child rows (individual topics within a grouped flow) */}
                               <Show when={isOpen()}>
-                                {row.children.filter(c => c.totalIn + c.totalOut > 100).map(child => (
-                                  <tr style={{ "border-bottom": "1px solid var(--1)", background: "transparent" }}
-                                    onMouseEnter={(e) => { e.currentTarget.style.background = "var(--hover)"; }}
-                                    onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-                                  >
-                                    <td style={{
-                                      padding: "5px 10px 5px 36px", "white-space": "nowrap",
-                                      color: "var(--3)", "font-size": "var(--t-sm)",
-                                    }}>
-                                      {child.topic.replace(/_/g, " ")}
-                                    </td>
-                                    <td style={{ padding: "5px 6px", "border-right": "1px solid var(--1)" }}>{chip(child.protocol)}</td>
-                                    <td style={{ padding: "5px 10px", "text-align": "right", color: "var(--3)", "font-size": "var(--t-sm)", "white-space": "nowrap", "border-left": "2px solid var(--2)", "border-right": "1px solid var(--1)" }}>{fmtPair(child.dataIn, child.dataOut)}</td>
-                                    {activeControlKinds().map((kind, i) => {
-                                      const cv = child.control[kind];
-                                      const hd = cv && (cv.in > 0 || cv.out > 0);
-                                      return (
-                                        <td style={{
-                                          padding: "5px 8px", "text-align": "right", "font-size": "var(--t-sm)",
-                                          color: hd ? "var(--3)" : "var(--2)", "white-space": "nowrap",
-                                          "border-left": i === 0 ? "2px solid var(--2)" : "1px solid var(--1)",
-                                        }}>{hd ? fmtPair(cv!.in, cv!.out) : "-"}</td>
-                                      );
-                                    })}
-                                    <td style={{ padding: "5px 10px", "text-align": "right", "font-size": "var(--t-sm)", "white-space": "nowrap", background: "rgba(232, 118, 118, 0.06)", "border-left": "2px solid var(--2)", color: child.bleedIn + child.bleedOut > 50 ? "var(--3)" : "var(--2)" }}>{fmtPair(child.bleedIn, child.bleedOut)}</td>
-                                  </tr>
-                                ))}
+                                <For each={row.children.filter(c => c.totalIn + c.totalOut > 100)}>
+                                  {(child) => (
+                                    <tr style={{ "border-bottom": "1px solid var(--1)", background: "transparent" }}
+                                      on:mouseenter={(e: MouseEvent) => { (e.currentTarget as HTMLElement).style.background = "var(--hover)"; }}
+                                      on:mouseleave={(e: MouseEvent) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                                    >
+                                      <td style={{
+                                        padding: "5px 10px 5px 36px", "white-space": "nowrap",
+                                        color: "var(--3)", "font-size": "var(--t-sm)",
+                                      }}>
+                                        {child.topic.replace(/_/g, " ")}
+                                      </td>
+                                      <td style={{ padding: "5px 6px", "border-right": "1px solid var(--1)" }}>{chip(child.protocol)}</td>
+                                      <td style={{ padding: "5px 10px", "text-align": "right", color: "var(--3)", "font-size": "var(--t-sm)", "white-space": "nowrap", "border-left": "2px solid var(--2)", "border-right": "1px solid var(--1)" }}>{fmtPair(child.dataIn, child.dataOut)}</td>
+                                      <For each={activeControlKinds()}>
+                                        {(kind, i) => {
+                                          const cv = child.control[kind];
+                                          const hd = cv && (cv.in > 0 || cv.out > 0);
+                                          return (
+                                            <td style={{
+                                              padding: "5px 8px", "text-align": "right", "font-size": "var(--t-sm)",
+                                              color: hd ? "var(--3)" : "var(--2)", "white-space": "nowrap",
+                                              "border-left": i() === 0 ? "2px solid var(--2)" : "1px solid var(--1)",
+                                            }}>{hd ? fmtPair(cv!.in, cv!.out) : "-"}</td>
+                                          );
+                                        }}
+                                      </For>
+                                      <td style={{ padding: "5px 10px", "text-align": "right", "font-size": "var(--t-sm)", "white-space": "nowrap", background: "rgba(232, 118, 118, 0.06)", "border-left": "2px solid var(--2)", color: child.bleedIn + child.bleedOut > 50 ? "var(--3)" : "var(--2)" }}>{fmtPair(child.bleedIn, child.bleedOut)}</td>
+                                    </tr>
+                                  )}
+                                </For>
                               </Show>
                             </>
                           );
@@ -2039,35 +2025,39 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {protocolBreakdown().map(row => (
-                      <tr style={{ "border-bottom": "1px solid var(--1)" }}
-                        onMouseEnter={(e) => { e.currentTarget.style.background = "var(--hover)"; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-                      >
-                        <td style={{
-                          padding: "4px 10px", "white-space": "nowrap", color: "var(--fg)",
-                        }}>{row.protocol}</td>
-                        <td style={{
-                          padding: "4px 10px", "text-align": "right", color: "var(--3)",
-                          "white-space": "nowrap",
-                        }}>{fmtPair(row.framing.in, row.framing.out)}</td>
-                        {activeProtoControlKinds().map(kind => {
-                          const cv = row.control[kind];
-                          const hasData = cv && (cv.in > 0 || cv.out > 0);
-                          return (
-                            <td style={{
-                              padding: "4px 8px", "text-align": "right",
-                              color: hasData ? "var(--3)" : "var(--2)",
-                              "white-space": "nowrap",
-                            }}>{hasData ? fmtPair(cv!.in, cv!.out) : "-"}</td>
-                          );
-                        })}
-                        <td style={{
-                          padding: "4px 10px", "text-align": "right", color: "var(--fg)",
-                          "font-weight": "600", "white-space": "nowrap",
-                        }}>{fmtPair(row.totalIn, row.totalOut)}</td>
-                      </tr>
-                    ))}
+                    <For each={protocolBreakdown()}>
+                      {(row) => (
+                        <tr style={{ "border-bottom": "1px solid var(--1)" }}
+                          on:mouseenter={(e: MouseEvent) => { (e.currentTarget as HTMLElement).style.background = "var(--hover)"; }}
+                          on:mouseleave={(e: MouseEvent) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                        >
+                          <td style={{
+                            padding: "4px 10px", "white-space": "nowrap", color: "var(--fg)",
+                          }}>{row.protocol}</td>
+                          <td style={{
+                            padding: "4px 10px", "text-align": "right", color: "var(--3)",
+                            "white-space": "nowrap",
+                          }}>{fmtPair(row.framing.in, row.framing.out)}</td>
+                          <For each={activeProtoControlKinds()}>
+                            {(kind) => {
+                              const cv = row.control[kind];
+                              const hasData = cv && (cv.in > 0 || cv.out > 0);
+                              return (
+                                <td style={{
+                                  padding: "4px 8px", "text-align": "right",
+                                  color: hasData ? "var(--3)" : "var(--2)",
+                                  "white-space": "nowrap",
+                                }}>{hasData ? fmtPair(cv!.in, cv!.out) : "-"}</td>
+                              );
+                            }}
+                          </For>
+                          <td style={{
+                            padding: "4px 10px", "text-align": "right", color: "var(--fg)",
+                            "font-weight": "600", "white-space": "nowrap",
+                          }}>{fmtPair(row.totalIn, row.totalOut)}</td>
+                        </tr>
+                      )}
+                    </For>
                   </tbody>
                 </table>
               </div>
