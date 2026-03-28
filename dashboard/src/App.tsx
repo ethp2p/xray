@@ -802,15 +802,40 @@ function StreamGraph(props: {
 
     const pt = props.points[pi];
     if (!pt) { setHoveredLayer(null); props.onFlowHover(null); return; }
-    const isUpper = yFrac < 0.5;
-    let best: string | null = null;
-    let bestVal = 0;
-    for (const l of layers()) {
-      const v = isUpper ? (pt.flows[l.key]?.in ?? 0) : (pt.flows[l.key]?.out ?? 0);
-      if (v > bestVal) { bestVal = v; best = l.key; }
+    const { H } = stream();
+    const mid = H / 2;
+    const pad = 20;
+    let maxVal = 1;
+    for (const p of props.points) {
+      let up = 0, down = 0;
+      for (const l of layers()) { up += (p.flows[l.key]?.out ?? 0); down += (p.flows[l.key]?.in ?? 0); }
+      maxVal = Math.max(maxVal, up, down);
     }
-    setHoveredLayer(best);
-    props.onFlowHover(best);
+    const ceil = snapCeiling(maxVal);
+    const scale = (mid - pad) / ceil;
+    const svgY = yFrac * H;
+    let hit: string | null = null;
+    if (svgY < mid) {
+      let cumul = 0;
+      for (const l of layers()) {
+        const v = pt.flows[l.key]?.in ?? 0;
+        const bandTop = mid - (cumul + v) * scale;
+        const bandBot = mid - cumul * scale;
+        if (svgY >= bandTop && svgY <= bandBot) { hit = l.key; break; }
+        cumul += v;
+      }
+    } else {
+      let cumul = 0;
+      for (const l of layers()) {
+        const v = pt.flows[l.key]?.out ?? 0;
+        const bandTop = mid + cumul * scale;
+        const bandBot = mid + (cumul + v) * scale;
+        if (svgY >= bandTop && svgY <= bandBot) { hit = l.key; break; }
+        cumul += v;
+      }
+    }
+    setHoveredLayer(hit);
+    props.onFlowHover(hit);
   };
 
   return (
