@@ -428,8 +428,8 @@ const LIVE_SLOTS_FLUSH_MS = 120;
 
 const KB = 1024, MB = 1048576;
 const Y_CEILINGS = [
-  10*KB, 20*KB, 50*KB, 100*KB, 200*KB, 500*KB,
-  1*MB, 2*MB, 5*MB, 10*MB, 20*MB, 50*MB,
+  8*KB, 16*KB, 32*KB, 64*KB, 128*KB, 256*KB, 512*KB,
+  1*MB, 2*MB, 4*MB, 8*MB, 16*MB, 32*MB, 64*MB,
 ];
 function snapCeiling(v: number): number {
   for (const c of Y_CEILINGS) { if (c >= v) return c; }
@@ -717,8 +717,26 @@ function StreamGraph(props: {
   const FLOW_ORDER_MAP = Object.fromEntries(FLOW_ORDER) as Record<string, number>;
   const flowOrder = (key: string) => FLOW_ORDER_MAP[key] ?? 50;
 
-  const legendItems = createMemo((): Layer[] =>
-    FLOW_ORDER.map(([flow]) => ({ key: flow, color: topicColor(flow, props.theme), label: flow.replace(/_/g, " ") }))
+  const LEGEND_BROADCAST: string[] = [
+    "beacon_block", "blob_sidecar", "data_column_sidecar",
+    "attestation", "beacon_aggregate_and_proof",
+    "sync_committee_contribution_and_proof",
+    "voluntary_exit", "proposer_slashing", "attester_slashing",
+  ];
+  const LEGEND_RPC: string[] = [
+    "blocks_by_range", "blocks_by_root", "blobs_by_range", "blobs_by_root",
+    "data_column_sidecars_by_range", "data_column_sidecars_by_root",
+    "status", "metadata", "ping", "goodbye",
+  ];
+  const LEGEND_OVERHEAD: string[] = ["meshsub"];
+
+  const toLayers = (keys: string[]): Layer[] =>
+    keys.map(k => ({ key: k, color: topicColor(k, props.theme), label: k.replace(/_/g, " ") }));
+
+  const broadcastLegend = createMemo(() => toLayers(LEGEND_BROADCAST));
+  const rpcLegend = createMemo(() => toLayers(LEGEND_RPC));
+  const overheadLegend = createMemo((): Layer[] =>
+    LEGEND_OVERHEAD.map(k => ({ key: k, color: getProtoColor("gossipsub", props.theme), label: k }))
   );
 
   const layers = createMemo((): Layer[] => {
@@ -930,11 +948,10 @@ function StreamGraph(props: {
           {(() => {
             const { H, ceil, scale } = stream();
             const mid = H / 2;
-            const divisions = 5;
-            const step = ceil / divisions;
-            const fmt = (v: number) => v >= MB ? (v / MB).toFixed(v % MB === 0 ? 0 : 1) + " MiB" : (v / KB).toFixed(0) + " KiB";
-            const ticks: number[] = [];
-            for (let i = 1; i <= divisions; i++) ticks.push(i * step);
+            const fmt = (v: number) => v >= MB ? `${v / MB} MiB` : `${v / KB} KiB`;
+            const ticks = ceil > 0
+              ? [ceil / 8, ceil / 4, ceil / 2, ceil].filter(v => v >= KB)
+              : [];
             return ticks.map(v => (
               <>
                 <line x1={0} y1={mid - v * scale} x2={stream().W} y2={mid - v * scale} stroke="var(--2)" stroke-width={0.3} style={{ transition: "y1 0.4s ease, y2 0.4s ease" }} />
@@ -969,16 +986,24 @@ function StreamGraph(props: {
         </svg>
 
         {/* direction labels */}
-        <span style={{
-          position: "absolute", left: "6px", top: "calc(50% - 16px)",
-          "font-family": "var(--m)", "font-size": "var(--t-sm)", color: "var(--3)",
-          "letter-spacing": "var(--track-caps)", opacity: 0.5, "pointer-events": "none",
-        }}>RCVD</span>
-        <span style={{
-          position: "absolute", left: "6px", top: "calc(50% + 8px)",
-          "font-family": "var(--m)", "font-size": "var(--t-sm)", color: "var(--3)",
-          "letter-spacing": "var(--track-caps)", opacity: 0.5, "pointer-events": "none",
-        }}>SENT</span>
+        {(() => {
+          const labelStyle = (bottom: boolean, right: boolean): JSX.CSSProperties => ({
+            position: "absolute",
+            [right ? "right" : "left"]: "6px",
+            [bottom ? "top" : "bottom"]: "calc(50% + 4px)",
+            "font-family": "var(--m)", "font-size": "var(--t-xs)", color: "var(--fg)",
+            "letter-spacing": "var(--track-caps)", opacity: 0.35, "pointer-events": "none",
+            "z-index": 5,
+          });
+          return (
+            <>
+              <span style={labelStyle(false, false)}>RCVD</span>
+              <span style={labelStyle(true, false)}>SENT</span>
+              <span style={labelStyle(false, true)}>RCVD</span>
+              <span style={labelStyle(true, true)}>SENT</span>
+            </>
+          );
+        })()}
 
         {/* hover tooltip */}
         <Show when={hoverX() !== null && props.points[hoverX()!]}>
@@ -1078,11 +1103,21 @@ function StreamGraph(props: {
         {/* Vertical legend (right side) */}
         <div style={{
           "flex-shrink": 0, width: "120px", "overflow-y": "auto",
-          padding: "6px 8px", display: "flex", "flex-direction": "column", gap: "2px",
+          padding: "6px 8px", display: "flex", "flex-direction": "column", gap: "0",
           "border-left": "1px solid var(--1)",
         }}>
-          <For each={legendItems()}>
-            {(l) => (
+          {/* Section renderer */}
+          {(() => {
+            const sectionHeader = (label: string, first?: boolean) => (
+              <div style={{
+                "font-size": "var(--t-xs)", "font-family": "var(--m)",
+                color: "var(--3)", "letter-spacing": "var(--track-caps)",
+                "padding-top": first ? "0" : "6px", "padding-bottom": "2px",
+                "border-top": first ? "none" : "1px solid var(--2)",
+                "margin-top": first ? "0" : "4px",
+              }}>{label}</div>
+            );
+            const legendEntry = (l: Layer) => (
               <span
                 on:mouseenter={() => { setHoveredLayer(l.key); props.onFlowHover(l.key); }}
                 on:mouseleave={() => { setHoveredLayer(null); props.onFlowHover(null); }}
@@ -1102,20 +1137,28 @@ function StreamGraph(props: {
                 }} />
                 {l.label}
               </span>
-            )}
-          </For>
-          {/* Bleed legend entry */}
-          <div style={{ "border-top": "1px solid var(--2)", "margin-top": "4px", "padding-top": "4px" }}>
-            <span style={{
-              "font-size": "var(--t-sm)", "font-family": "var(--m)", color: "var(--3)",
-              display: "flex", "align-items": "center", gap: "5px",
-            }}>
-              <svg width="6" height="6" style={{ "flex-shrink": 0 }}>
-                <rect width="6" height="6" fill="url(#bleed-hatch)" stroke="var(--3)" stroke-width="0.5" />
-              </svg>
-              bleed
-            </span>
-          </div>
+            );
+            return (
+              <>
+                {sectionHeader("BROADCAST", true)}
+                <For each={broadcastLegend()}>{(l) => legendEntry(l)}</For>
+                {sectionHeader("RPC")}
+                <For each={rpcLegend()}>{(l) => legendEntry(l)}</For>
+                {sectionHeader("OVERHEAD")}
+                <For each={overheadLegend()}>{(l) => legendEntry(l)}</For>
+                {sectionHeader("MARKERS")}
+                <span style={{
+                  "font-size": "var(--t-sm)", "font-family": "var(--m)", color: "var(--3)",
+                  display: "flex", "align-items": "center", gap: "5px", padding: "1px 0",
+                }}>
+                  <svg width="6" height="6" style={{ "flex-shrink": 0 }}>
+                    <rect width="6" height="6" fill="url(#bleed-hatch)" stroke="var(--3)" stroke-width="0.5" />
+                  </svg>
+                  bleed
+                </span>
+              </>
+            );
+          })()}
         </div>
       </div>
     </Show>
