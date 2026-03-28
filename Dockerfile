@@ -19,7 +19,6 @@ FROM gcr.io/distroless/static-debian12
 COPY --from=backend /introspector /usr/local/bin/introspector
 COPY --from=dashboard /src/dist /srv/dashboard
 EXPOSE 9100
-VOLUME /data
 ENTRYPOINT ["introspector"]
 CMD [ \
   "--ingest", "/tmp/wiretap.sock", \

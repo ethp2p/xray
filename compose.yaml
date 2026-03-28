@@ -5,7 +5,7 @@ services:
     ports:
       - "9100:9100"
     volumes:
-      - data:/data
+      - ${WIRETAP_DATA_DIR:-~/.wiretap/data}:/data
       - ${WIRETAP_SOCK_DIR:-/tmp}:/run/wiretap
     command:
       - --ingest=/run/wiretap/wiretap.sock
@@ -16,5 +16,3 @@ services:
       - --retention-days=30
     restart: unless-stopped
 
-volumes:
-  data:
