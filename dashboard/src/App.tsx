@@ -869,7 +869,7 @@ function StreamGraph(props: {
           <Show when={playheadX() !== null}>
             <line
               x1={playheadX()!} y1={0} x2={playheadX()!} y2={stream().H}
-              stroke="var(--hi)" stroke-width={1} opacity={0.6}
+              stroke="var(--3)" stroke-width={0.5} opacity={0.4} stroke-dasharray="2,4"
             />
           </Show>
 
