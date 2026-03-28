@@ -5,26 +5,15 @@ services:
       - "9100:9100"
     volumes:
       - data:/data
-      - ingest:/tmp
-    environment:
-      - WIRETAP_GENESIS_UNIX=1606824023
-      - WIRETAP_SECONDS_PER_SLOT=12
-      - WIRETAP_RETENTION_DAYS=30
+      - ${WIRETAP_SOCK_DIR:-/tmp}:/run/wiretap
     command:
-      - --ingest=/tmp/wiretap.sock
+      - --ingest=/run/wiretap/wiretap.sock
       - --listen=0.0.0.0:9100
       - --data-dir=/data
       - --static-dir=/srv/dashboard
       - --genesis-unix=1606824023
       - --retention-days=30
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "/usr/local/bin/introspector", "--help"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 5s
 
 volumes:
   data:
-  ingest:
