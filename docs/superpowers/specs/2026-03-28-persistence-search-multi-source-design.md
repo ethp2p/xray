@@ -4,35 +4,58 @@ This spec covers four interconnected changes to Wiretap: protocol handshake
 redesign, peer tracking in the live path, multi-source support with a
 dashboard source switcher, and file-based persistence with search.
 
+Both sides of the protocol (probe and backend) are deployed together from
+the same repo. There is no cross-version compatibility requirement. Protocol
+changes are breaking and both sides update in lockstep.
+
 ## Protocol changes
+
+### Connection topology
+
+The current architecture has the probe listening on a Unix socket and the
+backend dialing in. This inverts for multi-source: the backend listens on
+a socket (Unix or TCP), and probes dial in. This allows multiple probes to
+connect to a single backend simultaneously.
+
+The `--socket` flag on the backend becomes the listen address. The probe's
+`SinkUnix` changes from listener to dialer: it connects to the backend's
+socket and sends `ClientHello` as the first message.
 
 ### Handshake
 
-The current protocol is unidirectional: the probe streams events to the
-backend with no response. The probe sends a `ServerHello` (misnamed; the
-probe is the client) as the first envelope, then a snapshot, then live
-events.
-
-The new protocol introduces a bidirectional handshake before the event
-stream begins. The probe sends a `ClientHello`, the backend replies with a
-`ServerHello` that assigns a stable `source_id`, then the probe continues
-with the snapshot and event stream.
+The probe sends a `ClientHello`, the backend replies with a `ServerHello`
+that assigns a stable `source_id`, then the probe sends a snapshot and
+transitions to streaming events.
 
 ```
 probe ──── ClientHello ────► backend
 probe ◄─── ServerHello ───── backend
-probe ──── SnapshotStart ──► backend
-probe ──── StringDef* ─────► backend
-probe ──── PeerUpsert* ────► backend
-probe ──── ConnectionUpsert* ► backend
-probe ──── StreamUpsert* ──► backend
-probe ──── SnapshotEnd ────► backend
-probe ──── events... ──────► backend  (unidirectional from here)
+probe ──── Envelope(SnapshotStart) ──► backend
+probe ──── Envelope(StringDef) ... ──► backend
+probe ──── Envelope(PeerUpsert) ... ──► backend
+probe ──── Envelope(ConnectionUpsert) ... ──► backend
+probe ──── Envelope(StreamUpsert) ... ──► backend
+probe ──── Envelope(SnapshotEnd) ──► backend
+probe ──── Envelope(StreamChunk) ... ──► backend
 ```
 
-Both `ClientHello` and `ServerHello` are sent as varint-delimited protobuf
-messages outside the `Envelope` wrapper, since they precede the event
-stream. The `Envelope` oneof no longer contains a hello message.
+### Wire framing
+
+All messages use varint-delimited protobuf. To avoid ambiguity between
+message types, the wire uses a single-byte type discriminator before each
+varint-delimited message:
+
+- `0x01`: `ClientHello`
+- `0x02`: `ServerHello`
+- `0x03`: `Envelope`
+
+The reader checks the discriminator byte, then reads the varint length
+and deserializes into the corresponding type. The handshake phase reads
+`0x01` (ClientHello) then writes `0x02` (ServerHello). All subsequent
+messages from the probe are `0x03` (Envelope).
+
+This eliminates the need for a `Handshake` wrapper message. Each type is
+a standalone protobuf message.
 
 ### ClientHello (probe to backend)
 
@@ -46,9 +69,6 @@ message ClientHello {
 }
 ```
 
-Removed from the old `ServerHello`: `source_id` (now assigned by backend),
-`wait_for_attach` (probe-internal, not a protocol concern).
-
 ### ServerHello (backend to probe)
 
 ```protobuf
@@ -58,16 +78,20 @@ message ServerHello {
 }
 ```
 
-The backend derives `source_id` deterministically from `peer_id` so the
-same probe always receives the same source_id. On reconnection, the
-backend recognizes the peer and reassigns the existing source_id, allowing
-it to correlate historical data with the reconnected probe.
+If the backend does not support the probe's protocol version, it closes
+the connection immediately after reading `ClientHello` (no `ServerHello`
+sent). The probe treats a connection close before receiving `ServerHello`
+as a version mismatch and logs the error.
+
+The backend derives `source_id` deterministically from `peer_id`: the
+full multibase-encoded peer ID string (the standard libp2p string
+representation). Same peer always gets the same source_id.
 
 ### Envelope changes
 
-The `Envelope` oneof drops `server_hello`, `snapshot_start`, and
-`snapshot_end`. These become standalone messages in the handshake phase.
-The envelope carries only runtime events:
+`SnapshotStart` and `SnapshotEnd` remain in the `Envelope` oneof. They
+carry seq numbers and timestamps like all other events. The `Envelope`
+oneof drops only `server_hello` (field 10):
 
 ```protobuf
 message Envelope {
@@ -75,6 +99,9 @@ message Envelope {
   int64 observed_at_ns = 2;
 
   oneof payload {
+    SnapshotStart snapshot_start = 11;
+    SnapshotEnd snapshot_end = 12;
+
     StringDef string_def = 20;
     PeerUpsert peer_upsert = 21;
     ConnectionUpsert connection_upsert = 22;
@@ -86,50 +113,27 @@ message Envelope {
 }
 ```
 
-`SnapshotStart` and `SnapshotEnd` become standalone framing messages sent
-between `ServerHello` and the first `Envelope`. They use their own
-varint-delimited encoding, same as the hello messages. They can be
-distinguished by protobuf tag since `SnapshotStart` and `SnapshotEnd` are
-distinct message types with no overlapping semantics.
+The backend reads `Envelope` messages in a loop after the handshake.
+It tracks the session phase internally: on `SnapshotStart` it enters
+snapshot mode, on `SnapshotEnd` it transitions to live mode. During
+snapshot mode it processes `StringDef`, `PeerUpsert`, `ConnectionUpsert`,
+and `StreamUpsert` to rebuild state. `StreamChunk` events during snapshot
+mode are ignored (the probe should not send them, but the backend is
+tolerant).
 
-Actually, a simpler approach: define a `Handshake` wrapper:
+### Reconnection semantics
 
-```protobuf
-message Handshake {
-  oneof payload {
-    ClientHello client_hello = 1;
-    ServerHello server_hello = 2;
-    SnapshotStart snapshot_start = 3;
-    SnapshotEnd snapshot_end = 4;
-  }
-}
-```
+When a probe reconnects (same `peer_id`, new TCP connection), the backend:
 
-The connection starts in handshake phase (exchanging `Handshake` messages)
-then transitions to event phase (exchanging `Envelope` messages). The
-probe knows when to switch because it sends `SnapshotEnd` and then begins
-sending `Envelope` messages. The backend knows because it receives
-`SnapshotEnd` and then expects `Envelope` messages.
+1. Assigns the same `source_id` (deterministic from `peer_id`)
+2. Compares `boot_id` to the previous session
+3. If `boot_id` changed (probe restarted): clears `strings`, `streams`,
+   and `peers` maps for this source. The new snapshot will rebuild them.
+   In-memory `slots` are kept (they are independent of aliases).
+4. If `boot_id` is the same (network interruption): same behavior (clear
+   and rebuild from snapshot), since alias numbering may have diverged.
 
-During the snapshot phase, `StringDef`, `PeerUpsert`, `ConnectionUpsert`,
-and `StreamUpsert` are still sent as `Envelope` messages (they carry seq
-numbers and timestamps). So the actual framing is:
-
-```
-ClientHello (Handshake)
-ServerHello (Handshake)
-SnapshotStart (Handshake)
-Envelope(StringDef) ...
-Envelope(PeerUpsert) ...
-Envelope(ConnectionUpsert) ...
-Envelope(StreamUpsert) ...
-SnapshotEnd (Handshake)
-Envelope(StreamChunk) ...   <- live events from here
-```
-
-All messages on the wire are varint-delimited protobuf. The reader
-determines the phase from context (first two messages are handshake, then
-snapshot bracketed by start/end, then envelopes).
+The fresh snapshot after reconnection is the authoritative state.
 
 ## Peer tracking
 
@@ -161,14 +165,14 @@ type ConnState struct {
     Security   string
     Muxer      string
     OpenedAtNs int64
-    ClosedAtNs int64     // 0 if still open
 }
 ```
 
 The processor maintains a `peers map[uint64]*PeerState` per source,
 keyed by `peer_alias`. On `PeerUpsert`, it creates or updates the entry.
 On `ConnectionUpsert`, it adds the connection to the peer's map. On
-`ConnectionClosed`, it sets `ClosedAtNs` and removes the connection.
+`ConnectionClosed`, it removes the connection from the peer's map. If a
+peer has zero remaining connections, the peer entry is removed.
 
 ### API
 
@@ -179,9 +183,14 @@ On `ConnectionUpsert`, it adds the connection to the peer's map. On
   "peers": [
     {
       "peer_id": "16Uiu2HAm...",
-      "connections": 2,
-      "direction": "inbound",
-      "remote_addr": "/ip4/1.2.3.4/tcp/9000",
+      "connections": [
+        {
+          "remote_addr": "/ip4/1.2.3.4/tcp/9000",
+          "direction": "inbound",
+          "transport": "tcp",
+          "opened_at_ns": 1711612800000000000
+        }
+      ],
       "first_seen_ns": 1711612800000000000,
       "last_seen_ns": 1711612812000000000
     }
@@ -210,33 +219,47 @@ type SourceInfo struct {
 }
 ```
 
-`source_id` is derived deterministically from `peer_id`. A simple approach:
-base58-encode the peer_id and take a short prefix, or use the full
-multibase-encoded peer ID string (which is what libp2p uses as the string
-representation). Since peer IDs are already unique, the full string
-representation is the cleanest choice.
+`source_id` is the full multibase-encoded peer ID string (the standard
+libp2p string representation). Since peer IDs are already unique, no
+additional hashing or prefix extraction is needed.
 
 ### Per-source isolation
 
-The `Processor` namespaces all mutable state by source_id:
+The `Processor` holds a `sourceState` struct per source_id:
 
-- `strings map[uint32]string` (string interning table)
-- `streams map[uint64]*streamState`
-- `peers map[uint64]*PeerState`
-- `slots map[uint64]*slotAggregate` (in-memory live slots)
+```go
+type sourceState struct {
+    info    SourceInfo
+    strings map[uint32]string
+    streams map[uint64]*streamState
+    peers   map[uint64]*PeerState
+    slots   map[uint64]*slotAggregate
+}
+```
 
-Each source gets its own instance of these maps. Alias values (peer_alias,
-conn_alias, stream_alias, string_def ID) are local to a source and can
-collide across sources without conflict.
+Each source gets its own instance. Alias values (peer_alias, conn_alias,
+stream_alias, string_def ID) are local to a source and can collide across
+sources without conflict.
+
+### Connection handling
+
+The backend listens on the configured socket. Each incoming connection
+gets its own goroutine that handles the handshake and event loop. The
+`Processor` is thread-safe (already uses `sync.RWMutex`). Multiple probes
+can connect simultaneously; each is isolated by source_id.
 
 ### API changes
 
-All data endpoints gain an optional `source` query parameter:
+All data endpoints require a `source` query parameter:
 
 - `GET /api/slots?source=<id>` (live slot list for this source)
 - `GET /api/slots/:slot?source=<id>` (slot detail)
 - `GET /api/peers?source=<id>` (peer list)
 - `GET /api/search?source=<id>&...` (historical search)
+
+When `source` is omitted: if exactly one source exists (connected or
+historical), it is used as the default. Otherwise, the endpoint returns
+400 with an error listing available sources.
 
 A new endpoint lists available sources:
 
@@ -256,18 +279,21 @@ A new endpoint lists available sources:
 ```
 
 This includes both currently connected sources and historically known
-sources (from persisted data).
+sources (discovered from persisted data directories on startup).
+
+### WebSocket source scoping
+
+The WebSocket endpoint accepts a source parameter: `/api/ws?source=<id>`.
+The backend only sends updates for the specified source on that connection.
+On source switch, the dashboard closes the current WebSocket and opens a
+new one with the new source parameter.
 
 ### Dashboard
 
-The header gains a source selector. When only one source is connected,
-it shows the client name as static text. When multiple sources exist
-(connected or historical), it shows a dropdown. Selecting a source sets
-it as the active source; all API calls include `?source=<id>`.
-
-The WebSocket connection also scopes to the active source. On source
-switch, the dashboard reconnects the WebSocket with the new source
-parameter.
+The header gains a source selector. When only one source exists, it shows
+the client name as static text. When multiple sources exist (connected or
+historical), it shows a dropdown. Selecting a source sets it as the active
+source; all API calls include `?source=<id>`.
 
 ## Persistence
 
@@ -308,8 +334,13 @@ per epoch, each epoch file is ~6.4 KB. 30 days of data is ~6,750 epochs
 
 When the processor detects that a slot has finalized (current slot has
 advanced past it), it serializes the slot data and writes both the slot
-file and appends to the index. This happens asynchronously on a
+file and appends to the epoch index. This happens asynchronously on a
 background goroutine to avoid blocking the ingest path.
+
+Crash safety: slot files are written to a temporary file in the same
+directory then renamed into place (atomic on POSIX). The epoch index
+append is not atomic, but a truncated last line is detected and discarded
+on load (each line is independently valid JSON).
 
 The in-memory slot map retains the last 256 slots for live dashboard use.
 Evicted slots that have been persisted are dropped from memory.
@@ -324,8 +355,10 @@ Evicted slots that have been persisted are dropped from memory.
 ### Retention
 
 A background goroutine runs daily and removes slot files and epoch index
-files older than `--retention-days` (default 30). Since indices are
-per-epoch, pruning is deleting entire epoch files (no rewriting).
+files older than `--retention-days` (default 30). An epoch file is deleted
+only when all its slots fall outside the retention window. Since epochs
+are ~6.4 minutes, this is at most one epoch of extra retention at the
+boundary.
 
 ### Data directory
 
@@ -345,12 +378,10 @@ No schema migration, no data transformation.
 ### Endpoint
 
 ```
-GET /api/search?source=<id>&q=<text>&from_slot=N&to_slot=N&limit=N
+GET /api/search?source=<id>&from_slot=N&to_slot=N&limit=N
 ```
 
 - `source`: required, scopes to one source
-- `q`: substring match against slot number and epoch (both derived from
-  the slot number)
 - `from_slot`, `to_slot`: slot range filter (inclusive)
 - `limit`: max results (default 100, max 1000)
 
@@ -360,11 +391,10 @@ object (same shape as the slot list).
 ### Implementation
 
 The epoch index files are loaded into memory on startup as a sorted slice
-of `SlotSummary` values per source. Search is a linear scan with early
-termination (the slice is sorted by slot descending). At 216K entries
-per source, a full scan takes <10ms. Slot range queries can skip
-irrelevant epochs entirely since epoch boundaries are deterministic
-(`epoch = slot / 32`).
+of `SlotSummary` values per source. Search is a binary search on the
+sorted slice (by slot number) followed by linear scan within the range.
+Slot range queries skip irrelevant epochs since epoch boundaries are
+deterministic (`epoch = slot / 32`).
 
 Richer search criteria (by topic, by bytes threshold, by bleed amount)
 can be added later via an async analytics pipeline that reads the slot
@@ -377,40 +407,45 @@ this without migration.
 
 - `introspector/peers.go`: PeerState, ConnState types and update methods
 - `introspector/sources.go`: SourceInfo, source registry, source_id derivation
-- `introspector/storage.go`: file-based persistence (write slot, append index, load index, prune)
+- `introspector/storage.go`: file-based persistence (write slot, append
+  index, load index, prune, write-to-temp-then-rename)
 
 ### Modified files
 
-- `pb/ingest/ingest.proto`: ClientHello, ServerHello, Handshake wrapper,
-  Envelope oneof cleanup
-- `sink_unix.go`: send ClientHello, receive ServerHello, store assigned
-  source_id
-- `introspector/ingest.go`: read ClientHello, write ServerHello,
-  handshake/snapshot phase handling
-- `introspector/processor.go`: per-source state namespacing, peer event
-  handling, finalization callback for persistence
+- `pb/ingest/ingest.proto`: ClientHello, ServerHello (new messages),
+  Envelope oneof drops server_hello field, type discriminator constants
+- `sink_unix.go`: changes from listener to dialer, sends ClientHello,
+  receives ServerHello, stores assigned source_id
+- `introspector/ingest.go`: changes from dialer to listener, accepts
+  multiple connections, reads ClientHello, writes ServerHello, per-session
+  goroutine with handshake state machine
+- `introspector/processor.go`: per-source state (sourceState struct),
+  peer event handling, reconnection logic (boot_id comparison),
+  finalization callback for persistence
 - `introspector/server.go`: new endpoints (/api/peers, /api/sources,
-  /api/search), source query param on existing endpoints, peer_count in
-  WS messages
-- `introspector/types.go`: PeerSummary, SourceInfo, updated wsMessage
+  /api/search), source query param on existing endpoints, source-scoped
+  WebSocket, peer_count in WS messages, source defaulting logic
+- `introspector/types.go`: PeerSummary, SourceInfo, ConnState, updated
+  wsMessage
 - `cmd/introspector/main.go`: --data-dir, --retention-days flags, storage
-  initialization
+  initialization, listener setup
 
 ### Dashboard changes
 
 - Source selector in header (dropdown when multiple sources exist)
 - All API calls include `?source=<active_source_id>`
+- WebSocket connects to `/api/ws?source=<id>`
 - PEERS tab populated from `/api/peers` (no longer shows "unavailable")
-- Search UI (input field, results displayed in slot list)
+- Search UI (input field + slot range, results displayed in slot list)
 - Historical slot detail: shows flow table and chart (full buckets available)
 
 ## CLI flags
 
 ```
---socket         Unix socket path (default: /tmp/wiretap-introspector.sock)
---listen         HTTP listen address (default: 127.0.0.1:9100)
---genesis-unix   Beacon chain genesis timestamp (default: 1606824023)
---seconds-per-slot  Slot duration (default: 12)
---data-dir       Persistence directory (default: ~/.wiretap/data)
---retention-days Slot retention period (default: 30)
+--socket           Ingest listen address (default: /tmp/wiretap-introspector.sock)
+--listen           HTTP listen address (default: 127.0.0.1:9100)
+--genesis-unix     Beacon chain genesis timestamp (default: 1606824023)
+--seconds-per-slot Slot duration (default: 12)
+--data-dir         Persistence directory (default: ~/.wiretap/data)
+--retention-days   Slot retention period (default: 30)
 ```
