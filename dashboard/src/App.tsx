@@ -1325,11 +1325,11 @@ export default function App() {
             setLiveSlots(items);
             if (items.length > 0) setSel(items[0].slot);
           })
-          .catch(e => console.warn("[wiretap] slot list fetch failed:", e));
+          .catch(e => console.warn("[xray] slot list fetch failed:", e));
       };
       socket.onmessage = (event) => {
         let payload: ApiWsMessage;
-        try { payload = JSON.parse(String(event.data)); } catch (e) { console.warn("[wiretap] WS parse error:", e); return; }
+        try { payload = JSON.parse(String(event.data)); } catch (e) { console.warn("[xray] WS parse error:", e); return; }
         if (payload.type === "slot_update" && payload.slot) {
           pendingSlots.set(payload.slot.slot, payload.slot);
         }
@@ -1368,7 +1368,7 @@ export default function App() {
     fetch(apiUrl(`/api/slots/${s}`))
       .then(r => r.ok ? r.json() as Promise<ApiSlotDetail> : null)
       .then(data => { if (data && sel() === s) setLiveDetail(data); })
-      .catch(e => console.warn("[wiretap] slot detail fetch failed:", e));
+      .catch(e => console.warn("[xray] slot detail fetch failed:", e));
   });
 
   // ── Peers fetch ────────────────────────────────────────────────────
@@ -1456,7 +1456,7 @@ export default function App() {
             <path d="M7 8.4 L0 11.2 L7 15.2 L14 11.2 Z" stroke="currentColor" stroke-width="1" fill="none" stroke-linejoin="round" opacity="0.5" />
             <path d="M0 12.6 L7 22 L14 12.6 L7 16.6 Z" stroke="currentColor" stroke-width="1" fill="none" stroke-linejoin="round" />
           </svg>
-          ETHEREUM WIRETAP
+          ETHEREUM XRAY
         </span>
         <div style={{ flex: 1 }} />
 
