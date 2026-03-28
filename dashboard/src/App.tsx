@@ -48,15 +48,18 @@ function getProtoColor(key: string, t: ThemeName): string {
 
 const TOPICS_BY_PROTO: Record<string, string[]> = {
   gossipsub: [
-    "beacon_block", "beacon_agg_proof", "blob_sidecar_0", "blob_sidecar_1",
-    "blob_sidecar_2", "blob_sidecar_3", "sync_committee", "voluntary_exit",
+    "beacon_block", "attestation", "beacon_aggregate_and_proof",
+    "blob_sidecar", "data_column_sidecar",
+    "sync_committee_contribution_and_proof",
+    "voluntary_exit", "proposer_slashing", "attester_slashing",
+    "bls_to_execution_change",
+    "light_client_optimistic_update", "light_client_finality_update",
   ],
   "req-resp": [
     "blocks_by_range", "blocks_by_root", "blobs_by_range", "blobs_by_root",
-    "status", "metadata", "ping",
+    "data_column_sidecars_by_range", "data_column_sidecars_by_root",
+    "status", "metadata", "ping", "goodbye",
   ],
-  discv5: ["findnode", "nodes", "ping", "pong"],
-  "eth-wire": ["NewPooledTxHashes", "GetPooledTx", "PooledTx", "Transactions"],
 };
 
 const ALL_TOPICS = Object.values(TOPICS_BY_PROTO).flat();
@@ -64,9 +67,9 @@ const ALL_TOPICS = Object.values(TOPICS_BY_PROTO).flat();
 const TOPIC_HUES: Record<string, number> = {};
 {
   const hues = [
-    30, 50, 175, 195, 115, 140, 275, 305,
-    15, 65, 155, 210, 95, 245, 335, 55,
-    185, 225, 105, 265, 5, 75, 145, 220,
+    30, 195, 55, 140, 275, 100, 335, 15, 175, 240,
+    70, 305, 160, 210, 120, 350, 45, 185, 260, 90,
+    5, 225,
   ];
   ALL_TOPICS.forEach((t, i) => { TOPIC_HUES[t] = hues[i % hues.length]; });
 }
