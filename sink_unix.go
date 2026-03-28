@@ -167,16 +167,10 @@ func (s *SinkUnix) acceptLoop() {
 }
 
 func (s *SinkUnix) sendInitialSync(conn net.Conn) error {
-	if err := writeEnvelope(conn, s.nextEnvelope(&ingestpb.Envelope_ServerHello{
-		ServerHello: &ingestpb.ServerHello{
-			ProtocolVersion: ingestProtocolVersion,
-			SourceId:        s.sourceID,
-			BootId:          append([]byte(nil), s.bootID...),
-			LocalPeerId:     append([]byte(nil), s.localPeerID...),
-			StartedAtNs:     s.startedAtNs,
-			WaitForAttach:   s.waitForAttach,
-		},
-	})); err != nil {
+	if err := writeServerHello(conn, &ingestpb.ServerHello{
+		ProtocolVersion: ingestProtocolVersion,
+		SourceId:        s.sourceID,
+	}); err != nil {
 		return err
 	}
 
@@ -285,8 +279,6 @@ func (s *SinkUnix) nextEnvelope(payload any) *ingestpb.Envelope {
 		ObservedAtNs: time.Now().UnixNano(),
 	}
 	switch value := payload.(type) {
-	case *ingestpb.Envelope_ServerHello:
-		event.Payload = value
 	case *ingestpb.Envelope_SnapshotStart:
 		event.Payload = value
 	case *ingestpb.Envelope_SnapshotEnd:
@@ -365,6 +357,29 @@ func (c *unixClient) close() {
 	c.sink.removeClient(c)
 	close(c.sendCh)
 	_ = c.conn.Close()
+}
+
+const (
+	wireServerHelloByte byte = 0x02
+)
+
+// writeServerHello sends a standalone ServerHello using the type-discriminated
+// wire format: [0x02][varint len][proto bytes].
+func writeServerHello(w net.Conn, msg *ingestpb.ServerHello) error {
+	data, err := proto.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	if _, err := w.Write([]byte{wireServerHelloByte}); err != nil {
+		return err
+	}
+	var buf [binary.MaxVarintLen64]byte
+	n := binary.PutUvarint(buf[:], uint64(len(data)))
+	if _, err := w.Write(buf[:n]); err != nil {
+		return err
+	}
+	_, err = w.Write(data)
+	return err
 }
 
 func writeEnvelope(w net.Conn, event *ingestpb.Envelope) error {
