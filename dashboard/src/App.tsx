@@ -400,6 +400,8 @@ type ApiWsMessage = {
   current_slot?: number;
   slot?: ApiSlotSummary;
   slots?: ApiSlotSummary[];
+  source_id?: string;
+  peer_count?: number;
 };
 
 // ── API-to-UI converters ────────────────────────────────────────────────
@@ -1156,11 +1158,43 @@ export default function App() {
   const [wsStatus, setWsStatus] = createSignal<WsStatus>("disconnected");
   const [highlightedFlow, setHighlightedFlow] = createSignal<string | null>(null);
 
+  // Source management
+  const [sources, setSources] = createSignal<{ source_id: string; client_name: string; connected: boolean }[]>([]);
+  const [activeSource, setActiveSource] = createSignal("");
+  const [peerCount, setPeerCount] = createSignal<number | null>(null);
+
   // Live data signals
   const [liveSlots, setLiveSlots] = createSignal<SlotData[]>([]);
   const [liveDetail, setLiveDetail] = createSignal<ApiSlotDetail | null>(null);
+  const [livePeers, setLivePeers] = createSignal<any[]>([]);
+
+  // Search
+  const [searchMode, setSearchMode] = createSignal(false);
+  const [searchFrom, setSearchFrom] = createSignal("");
+  const [searchTo, setSearchTo] = createSignal("");
+  const [searchResults, setSearchResults] = createSignal<SlotData[] | null>(null);
 
   const isLive = () => dataMode() === "live";
+
+  const apiUrl = (path: string, extra?: Record<string, string>) => {
+    const params = new URLSearchParams();
+    if (activeSource()) params.set("source", activeSource());
+    if (extra) for (const [k, v] of Object.entries(extra)) params.set(k, v);
+    const qs = params.toString();
+    return qs ? `${path}?${qs}` : path;
+  };
+
+  onMount(() => {
+    fetch("/api/sources")
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data?.sources) return;
+        setSources(data.sources);
+        const connected = data.sources.find((s: any) => s.connected);
+        setActiveSource(connected?.source_id ?? data.sources[0]?.source_id ?? "");
+      })
+      .catch(() => {});
+  });
 
   // Data source switching
   const slots = createMemo(() => isLive() ? liveSlots() : genSlotSeries(tick() * 17));
@@ -1258,6 +1292,8 @@ export default function App() {
   // ── WebSocket connection (live mode only) ───────────────────────────
   createEffect(() => {
     if (!isLive()) { setWsStatus("disconnected"); return; }
+    const source = activeSource();
+    if (!source) return;
     let closed = false;
     let socket: WebSocket | null = null;
     let reconnectTimer: number | undefined;
@@ -1285,11 +1321,11 @@ export default function App() {
     const connect = () => {
       if (closed) return;
       setWsStatus("connecting");
-      socket = new WebSocket(window.location.origin.replace(/^http/, "ws") + "/api/ws");
+      socket = new WebSocket(window.location.origin.replace(/^http/, "ws") + apiUrl("/api/ws"));
       socket.onopen = () => {
         if (closed) return;
         setWsStatus("connected");
-        fetch("/api/slots")
+        fetch(apiUrl("/api/slots"))
           .then(r => r.ok ? r.json() as Promise<{ slots: ApiSlotSummary[] }> : null)
           .then(data => {
             if (!data || !isLive()) return;
@@ -1308,6 +1344,7 @@ export default function App() {
         if (payload.type === "slot_batch" && payload.slots) {
           for (const slot of payload.slots) pendingSlots.set(slot.slot, slot);
         }
+        if (payload.peer_count !== undefined) setPeerCount(payload.peer_count);
         scheduleFlush();
       };
       socket.onerror = () => { if (!closed) setWsStatus("reconnecting"); };
@@ -1335,10 +1372,24 @@ export default function App() {
     const s = sel();
     if (s === 0) return;
     setLiveDetail(null);
-    fetch(`/api/slots/${s}`)
+    fetch(apiUrl(`/api/slots/${s}`))
       .then(r => r.ok ? r.json() as Promise<ApiSlotDetail> : null)
       .then(data => { if (data && sel() === s) setLiveDetail(data); })
       .catch(e => console.warn("[wiretap] slot detail fetch failed:", e));
+  });
+
+  // ── Live peers fetch ─────────────────────────────────────────────
+  createEffect(() => {
+    if (!isLive() || view() !== "peers" || !activeSource()) return;
+    const fetchPeers = () => {
+      fetch(apiUrl("/api/peers"))
+        .then(r => r.ok ? r.json() : null)
+        .then(data => { if (data?.peers) setLivePeers(data.peers); })
+        .catch(() => {});
+    };
+    fetchPeers();
+    const iv = setInterval(fetchPeers, 5000);
+    onCleanup(() => clearInterval(iv));
   });
 
   // Sim tick timer (pauses when tab is hidden, only in sim mode)
@@ -1378,6 +1429,14 @@ export default function App() {
         setDataMode(next);
         if (next === "sim") setSel(HEAD);
         else setSel(0);
+      }
+      else if (e.key === "/" && !searchMode()) {
+        e.preventDefault();
+        setSearchMode(true);
+      }
+      else if (e.key === "Escape" && searchMode()) {
+        setSearchMode(false);
+        setSearchResults(null);
       }
     };
     window.addEventListener("keydown", h);
@@ -1464,6 +1523,34 @@ export default function App() {
           </button>
         </Show>
 
+        <Show when={peerCount() !== null}>
+          <span style={{ "font-family": "var(--m)", "font-size": "var(--t-sm)", color: "var(--3)" }}>
+            {peerCount()} peers
+          </span>
+        </Show>
+
+        <Show when={sources().length > 1} fallback={
+          <Show when={sources().length === 1}>
+            <span style={{ "font-family": "var(--m)", "font-size": "var(--t-sm)", color: "var(--3)" }}>
+              {sources()[0].client_name}
+            </span>
+          </Show>
+        }>
+          <select
+            value={activeSource()}
+            on:change={(e) => setActiveSource(e.currentTarget.value)}
+            style={{
+              "font-family": "var(--m)", "font-size": "var(--t-sm)",
+              background: "var(--1)", color: "var(--fg)", border: "1px solid var(--2)",
+              padding: "2px 4px", cursor: "pointer",
+            }}
+          >
+            <For each={sources()}>
+              {(src) => <option value={src.source_id}>{src.client_name}{src.connected ? "" : " (offline)"}</option>}
+            </For>
+          </select>
+        </Show>
+
         <span style={{ color: "var(--2)" }}>|</span>
         <span style={{ "font-family": "var(--m)", "font-size": "var(--t-md)", color: "var(--3)" }}>
           S<span style={{ color: "var(--fg)" }}>{sel()}</span>
@@ -1528,7 +1615,43 @@ export default function App() {
 
             {/* ── Slots view ── */}
             <Show when={view() === "slots"}>
-              <For each={slots()}>
+              <Show when={searchMode()}>
+                <div style={{ padding: "8px 12px", "border-bottom": "1px solid var(--2)", display: "flex", gap: "8px", "align-items": "center" }}>
+                  <input
+                    ref={(el) => setTimeout(() => el.focus(), 0)}
+                    placeholder="from slot"
+                    value={searchFrom()}
+                    on:input={(e) => setSearchFrom(e.currentTarget.value)}
+                    style={{ width: "80px", "font-family": "var(--m)", "font-size": "var(--t-sm)", background: "var(--0)", color: "var(--fg)", border: "1px solid var(--2)", padding: "2px 4px" }}
+                  />
+                  <span style={{ color: "var(--3)", "font-size": "var(--t-sm)", "font-family": "var(--m)" }}>to</span>
+                  <input
+                    placeholder="to slot"
+                    value={searchTo()}
+                    on:input={(e) => setSearchTo(e.currentTarget.value)}
+                    style={{ width: "80px", "font-family": "var(--m)", "font-size": "var(--t-sm)", background: "var(--0)", color: "var(--fg)", border: "1px solid var(--2)", padding: "2px 4px" }}
+                  />
+                  <button
+                    on:click={() => {
+                      const params: Record<string, string> = {};
+                      if (searchFrom()) params.from_slot = searchFrom();
+                      if (searchTo()) params.to_slot = searchTo();
+                      fetch(apiUrl("/api/search", params))
+                        .then(r => r.ok ? r.json() : null)
+                        .then(data => {
+                          if (data?.slots) setSearchResults(data.slots.map(apiSummaryToSlotData));
+                        })
+                        .catch(() => {});
+                    }}
+                    style={{ "font-family": "var(--m)", "font-size": "var(--t-sm)", background: "var(--1)", color: "var(--fg)", border: "1px solid var(--2)", padding: "2px 8px", cursor: "pointer" }}
+                  >search</button>
+                  <button
+                    on:click={() => { setSearchMode(false); setSearchResults(null); }}
+                    style={{ "font-family": "var(--m)", "font-size": "var(--t-xs)", background: "none", color: "var(--3)", border: "none", cursor: "pointer" }}
+                  >esc</button>
+                </div>
+              </Show>
+              <For each={searchResults() ?? slots()}>
                 {(s) => {
                   const isSel = () => s.slot === sel();
                   const isEpoch = s.slot % 32 === 0;
@@ -1632,9 +1755,34 @@ export default function App() {
             {/* ── Peers view ── */}
             <Show when={view() === "peers"}>
               <Show when={!isLive()} fallback={
-                <div style={{ padding: "24px 12px", "text-align": "center", color: "var(--3)", "font-family": "var(--m)", "font-size": "var(--t-md)" }}>
-                  Peer data unavailable in live mode
-                </div>
+                <>
+                  <For each={livePeers()}>
+                    {(p) => (
+                      <div style={{
+                        padding: "6px 12px", display: "flex", "align-items": "center",
+                        gap: "8px", "border-bottom": "1px solid var(--1)",
+                      }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = "var(--hover)"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                      >
+                        <div style={{ flex: 1, "min-width": 0 }}>
+                          <div style={{
+                            "font-family": "var(--m)", "font-size": "var(--t-md)", color: "var(--fg)",
+                            overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap",
+                          }}>{p.peer_id.length > 20 ? p.peer_id.slice(0, 8) + "..." + p.peer_id.slice(-8) : p.peer_id}</div>
+                          <div style={{ "font-family": "var(--m)", "font-size": "var(--t-sm)", color: "var(--3)", "margin-top": "1px" }}>
+                            {p.connections?.length ?? 0} conn &middot; {p.connections?.[0]?.direction ?? "unknown"} &middot; {p.connections?.[0]?.remote_addr ?? ""}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </For>
+                  <Show when={livePeers().length === 0}>
+                    <div style={{ padding: "24px 12px", "text-align": "center", color: "var(--3)", "font-family": "var(--m)", "font-size": "var(--t-md)" }}>
+                      No peers connected
+                    </div>
+                  </Show>
+                </>
               }>
                 {peers().map((p, i) => (
                   <div
@@ -1680,6 +1828,7 @@ export default function App() {
             <span><Kbd>l</Kbd> live</span>
             <span><Kbd>m</Kbd> mode</span>
             <span><Kbd>t</Kbd> theme</span>
+            <span><Kbd>/</Kbd> search</span>
           </div>
         </div>
 
