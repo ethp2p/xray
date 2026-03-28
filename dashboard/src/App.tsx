@@ -1482,6 +1482,18 @@ export default function App() {
                 <span style={{ "font-size": "var(--t-xs)", "margin-right": "3px", opacity: 0.35 }}>{tab.k}</span>{tab.l}
               </button>
             ))}
+            <button
+              on:click={() => { setView("slots"); setSearchMode(m => !m); if (searchMode()) setSearchResults(null); }}
+              style={{
+                padding: "7px 10px", cursor: "pointer",
+                "font-family": "var(--m)", "font-size": "var(--t-sm)",
+                color: searchMode() ? "var(--hi)" : "var(--3)",
+                background: "none", border: "none",
+                "border-bottom": searchMode() ? "2px solid var(--fg)" : "2px solid transparent",
+                "margin-bottom": "-2px",
+              }}
+              aria-label="Search slots"
+            >/</button>
           </div>
 
           {/* View content */}
