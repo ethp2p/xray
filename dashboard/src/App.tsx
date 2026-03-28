@@ -1001,6 +1001,7 @@ export default function App() {
   const [cmdOpen, setCmdOpen] = createSignal(false);
   const [theme, setTheme] = createSignal<ThemeName>("dark");
   const [wsStatus, setWsStatus] = createSignal<WsStatus>("disconnected");
+  const [followMode, setFollowMode] = createSignal(true);
   const [highlightedFlow, setHighlightedFlow] = createSignal<string | null>(null);
 
   // Source management
@@ -1106,13 +1107,29 @@ export default function App() {
       setLiveSlots(prev => {
         const bySlot = new Map(prev.map(s => [s.slot, s]));
         for (const s of items) bySlot.set(s.slot, apiSummaryToSlotData(s));
-        return [...bySlot.values()].sort((a, b) => b.slot - a.slot).slice(0, 512);
+        const sorted = [...bySlot.values()].sort((a, b) => b.slot - a.slot).slice(0, 512);
+        if (followMode() && sorted.length > 0) setSel(sorted[0].slot);
+        return sorted;
       });
     };
 
     const scheduleFlush = () => {
       if (flushTimer !== undefined) return;
       flushTimer = window.setTimeout(flushPending, LIVE_SLOTS_FLUSH_MS);
+    };
+
+    let detailRefreshTimer: number | undefined;
+    const refreshDetail = () => {
+      if (detailRefreshTimer !== undefined) return;
+      detailRefreshTimer = window.setTimeout(() => {
+        detailRefreshTimer = undefined;
+        const s = sel();
+        if (s === 0) return;
+        fetch(apiUrl(`/api/slots/${s}`))
+          .then(r => r.ok ? r.json() as Promise<ApiSlotDetail> : null)
+          .then(data => { if (data && sel() === s) setLiveDetail(data); })
+          .catch(() => {});
+      }, LIVE_SLOTS_FLUSH_MS);
     };
 
     const connect = () => {
@@ -1143,6 +1160,7 @@ export default function App() {
         }
         if (payload.peer_count !== undefined) setPeerCount(payload.peer_count);
         scheduleFlush();
+        if (followMode()) refreshDetail();
       };
       socket.onerror = () => { if (!closed) setWsStatus("reconnecting"); };
       socket.onclose = () => {
@@ -1159,6 +1177,7 @@ export default function App() {
       setWsStatus("disconnected");
       if (reconnectTimer !== undefined) window.clearTimeout(reconnectTimer);
       if (flushTimer !== undefined) window.clearTimeout(flushTimer);
+      if (detailRefreshTimer !== undefined) window.clearTimeout(detailRefreshTimer);
       socket?.close();
     });
   });
@@ -1197,12 +1216,16 @@ export default function App() {
       } else if (e.key === "j") {
         setSel(s => {
           const i = slots().findIndex(x => x.slot === s);
-          return i < slots().length - 1 ? slots()[i + 1].slot : s;
+          const next = i < slots().length - 1 ? slots()[i + 1].slot : s;
+          setFollowMode(false);
+          return next;
         });
       } else if (e.key === "k" && !e.metaKey && !e.ctrlKey) {
         setSel(s => {
           const i = slots().findIndex(x => x.slot === s);
-          return i > 0 ? slots()[i - 1].slot : s;
+          const next = i > 0 ? slots()[i - 1].slot : s;
+          setFollowMode(next === slots()[0]?.slot);
+          return next;
         });
       } else if (e.key === "1") { setView("slots"); }
       else if (e.key === "2") { setView("peers"); }
@@ -1261,6 +1284,9 @@ export default function App() {
         <span style={{ "font-family": "var(--m)", "font-size": "var(--t-sm)", color: wsStatus() === "connected" ? liveColor() : "var(--3)" }}>
           {wsStatus()}
         </span>
+        <Show when={followMode() && wsStatus() === "connected"}>
+          <span style={{ "font-family": "var(--m)", "font-size": "var(--t-xs)", color: "var(--3)" }}>follow</span>
+        </Show>
 
         <Show when={peerCount() !== null}>
           <span style={{ "font-family": "var(--m)", "font-size": "var(--t-sm)", color: "var(--3)" }}>
@@ -1406,7 +1432,10 @@ export default function App() {
                         </div>
                       )}
                       <button
-                        on:click={() => setSel(s.slot)}
+                        on:click={() => {
+                          setSel(s.slot);
+                          setFollowMode(s.slot === slots()[0]?.slot);
+                        }}
                         style={{
                           padding: "8px 12px 7px", cursor: "pointer", width: "100%",
                           background: isSel() ? "var(--sel-bg)" : "transparent",
