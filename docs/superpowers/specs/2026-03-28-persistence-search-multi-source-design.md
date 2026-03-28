@@ -257,16 +257,17 @@ can connect simultaneously; each is isolated by source_id.
 
 ### API changes
 
-All data endpoints require a `source` query parameter:
+All data endpoints accept a `source` query parameter:
 
-- `GET /api/slots?source=<id>` (live slot list for this source)
+- `GET /api/slots?source=<id>` (slot list)
 - `GET /api/slots/:slot?source=<id>` (slot detail)
 - `GET /api/peers?source=<id>` (peer list)
 - `GET /api/search?source=<id>&...` (historical search)
 
-When `source` is omitted: if exactly one source exists (connected or
-historical), it is used as the default. Otherwise, the endpoint returns
-400 with an error listing available sources.
+When `source` is omitted on any endpoint: if exactly one source exists
+(connected or historical), it is used as the default. Otherwise, the
+endpoint returns 400 with an error listing available sources. This rule
+applies uniformly to all endpoints including search.
 
 A new endpoint lists available sources:
 
@@ -375,9 +376,10 @@ Evicted slots that have been persisted are dropped from memory.
 
 - `/api/slots?source=<id>&limit=N`: returns recent slots. For connected
   sources, merges the in-memory live slots with the in-memory summary
-  index (persisted history). For disconnected historical sources, reads
-  entirely from the summary index. The result is always sorted by slot
-  descending and capped at `limit` (default 256).
+  index (persisted history), de-duplicated by slot number (live data
+  wins over persisted for the same slot). For disconnected historical
+  sources, reads entirely from the summary index. The result is always
+  sorted by slot descending and capped at `limit` (default 256).
 - `/api/slots/:slot?source=<id>`: checks in-memory first, falls back to
   reading `<source_id>/slots/<slot>.json`. Historical detail is returned
   unfiltered (the full persisted JSON blob). The `protocol`, `topic`, and
@@ -415,7 +417,7 @@ No schema migration, no data transformation.
 GET /api/search?source=<id>&from_slot=N&to_slot=N&limit=N
 ```
 
-- `source`: required, scopes to one source
+- `source`: scopes to one source (defaults per the uniform rule above)
 - `from_slot`, `to_slot`: slot range filter (inclusive)
 - `limit`: max results (default 100, max 1000)
 
@@ -454,8 +456,8 @@ this without migration.
   multiple connections, reads ClientHello, writes ServerHello, per-session
   goroutine with handshake state machine
 - `introspector/processor.go`: per-source state (sourceState struct),
-  peer event handling, reconnection logic (boot_id comparison),
-  finalization callback for persistence
+  peer event handling, session exclusivity (cancel old session on
+  reconnect, clear alias state), finalization callback for persistence
 - `introspector/server.go`: new endpoints (/api/peers, /api/sources,
   /api/search), source query param on existing endpoints, source-scoped
   WebSocket, peer_count in WS messages, source defaulting logic
