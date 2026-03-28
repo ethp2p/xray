@@ -305,25 +305,47 @@ function deriveFlows(breakdown: ApiBucketBreakdown[]): FlowRow[] {
 }
 
 function deriveFlowTimeSeries(buckets: ApiSlotBucketPoint[]): FlowTimePoint[] {
-  return buckets.map(b => {
+  const byOffset = new Map<number, ApiSlotBucketPoint>();
+  for (const b of buckets) {
+    const snapped = Math.round(b.offset_ms / TICK_MS) * TICK_MS;
+    const existing = byOffset.get(snapped);
+    if (existing) {
+      existing.bytes_in += b.bytes_in;
+      existing.bytes_out += b.bytes_out;
+      if (b.breakdown) {
+        if (!existing.breakdown) existing.breakdown = [];
+        existing.breakdown.push(...b.breakdown);
+      }
+    } else {
+      byOffset.set(snapped, { ...b, offset_ms: snapped, breakdown: b.breakdown ? [...b.breakdown] : [] });
+    }
+  }
+
+  const result: FlowTimePoint[] = [];
+  for (let i = 0; i < POINTS_PER_SLOT; i++) {
+    const ms = i * TICK_MS;
+    const b = byOffset.get(ms);
     const flows: Record<string, { in: number; out: number; bleedIn: number; bleedOut: number; bleedByDist: BleedDistData }> = {};
-    for (const row of b.breakdown ?? []) {
-      const flow = groupTopic(row.topic || row.protocol);
-      if (!flows[flow]) flows[flow] = { in: 0, out: 0, bleedIn: 0, bleedOut: 0, bleedByDist: {} };
-      flows[flow].in += row.bytes_in;
-      flows[flow].out += row.bytes_out;
-      flows[flow].bleedIn += row.bleed_bytes_in ?? 0;
-      flows[flow].bleedOut += row.bleed_bytes_out ?? 0;
-      if (row.bleed_by_distance) {
-        for (const [dist, val] of Object.entries(row.bleed_by_distance)) {
-          if (!flows[flow].bleedByDist[dist]) flows[flow].bleedByDist[dist] = { in: 0, out: 0 };
-          flows[flow].bleedByDist[dist].in += val.bytes_in;
-          flows[flow].bleedByDist[dist].out += val.bytes_out;
+    if (b) {
+      for (const row of b.breakdown ?? []) {
+        const flow = groupTopic(row.topic || row.protocol);
+        if (!flows[flow]) flows[flow] = { in: 0, out: 0, bleedIn: 0, bleedOut: 0, bleedByDist: {} };
+        flows[flow].in += row.bytes_in;
+        flows[flow].out += row.bytes_out;
+        flows[flow].bleedIn += row.bleed_bytes_in ?? 0;
+        flows[flow].bleedOut += row.bleed_bytes_out ?? 0;
+        if (row.bleed_by_distance) {
+          for (const [dist, val] of Object.entries(row.bleed_by_distance)) {
+            if (!flows[flow].bleedByDist[dist]) flows[flow].bleedByDist[dist] = { in: 0, out: 0 };
+            flows[flow].bleedByDist[dist].in += val.bytes_in;
+            flows[flow].bleedByDist[dist].out += val.bytes_out;
+          }
         }
       }
     }
-    return { offsetMs: b.offset_ms, flows };
-  });
+    result.push({ offsetMs: ms, flows });
+  }
+  return result;
 }
 
 // ── API types (match Go backend JSON) ───────────────────────────────────
