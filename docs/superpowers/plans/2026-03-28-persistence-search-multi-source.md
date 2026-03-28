@@ -933,12 +933,18 @@ Replace `UnixIngestClient` (dials probe) with `IngestListener` (listens for prob
 - [ ] **Step 1: Implement IngestListener**
 
 ```go
+type activeSession struct {
+    cancel func()
+    conn   net.Conn
+}
+
 type IngestListener struct {
+    ctx       context.Context
     processor *Processor
     registry  *SourceRegistry
     storage   *Storage
     listener  net.Listener
-    sessions  map[string]context.CancelFunc  // sourceID -> cancel
+    sessions  map[string]*activeSession  // sourceID -> active session
     mu        sync.Mutex
 }
 
