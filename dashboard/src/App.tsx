@@ -840,43 +840,50 @@ function StreamGraph(props: {
 
           {/* stream layers (highlighted flow rendered last for z-order) */}
           {(() => {
-            const hl = effectiveHighlight();
-            const sorted = hl
-              ? [...stream().paths].sort((a, b) => {
-                  const aHl = baseKey(a.key) === hl ? 1 : 0;
-                  const bHl = baseKey(b.key) === hl ? 1 : 0;
-                  return aHl - bHl;
-                })
-              : stream().paths;
-            return sorted.map(p => (
-              <path
-                d={p.d} fill={p.color}
-                opacity={hl === null ? streamOp() : hl === baseKey(p.key) ? 0.9 : dimOp()}
-                style={{ transition: "opacity 0.15s, d 0.4s ease" }}
-                onMouseEnter={() => { setHoveredLayer(baseKey(p.key)); props.onFlowHover(baseKey(p.key)); }}
-                onMouseLeave={() => { setHoveredLayer(null); props.onFlowHover(null); }}
-              />
-            ));
+            const sorted = createMemo(() => {
+              const hl = effectiveHighlight();
+              return hl
+                ? [...stream().paths].sort((a, b) => {
+                    const aHl = baseKey(a.key) === hl ? 1 : 0;
+                    const bHl = baseKey(b.key) === hl ? 1 : 0;
+                    return aHl - bHl;
+                  })
+                : stream().paths;
+            });
+            return (
+              <For each={sorted()}>
+                {(p) => (
+                  <path
+                    d={p.d} fill={p.color}
+                    opacity={effectiveHighlight() === null ? streamOp() : effectiveHighlight() === baseKey(p.key) ? 0.9 : dimOp()}
+                    style={{ transition: "opacity 0.15s, d 0.4s ease" }}
+                    onMouseEnter={() => { setHoveredLayer(baseKey(p.key)); props.onFlowHover(baseKey(p.key)); }}
+                    onMouseLeave={() => { setHoveredLayer(null); props.onFlowHover(null); }}
+                  />
+                )}
+              </For>
+            );
           })()}
 
           {/* bleed overlays (interactive for hover) */}
-          {stream().bleedPaths.map(p => {
-            const flowKey = baseKey(p.key.replace(/-bleed$/, ""));
-            const hl = effectiveHighlight();
-            const isHl = hl === flowKey;
-            const tint = isHl ? bleedTintForFlow(flowKey) : null;
-            return (
-              <>
-                {tint && <path d={p.d} fill={tint} opacity={0.9} />}
-                <path
-                  d={p.d} fill="url(#bleed-hatch)" opacity={isHl ? 0.9 : 0.8}
-                  style={{ cursor: "default" }}
-                  onMouseEnter={() => { setHoveredLayer(flowKey); props.onFlowHover(flowKey); }}
-                  onMouseLeave={() => { setHoveredLayer(null); props.onFlowHover(null); }}
-                />
-              </>
-            );
-          })}
+          <For each={stream().bleedPaths}>
+            {(p) => {
+              const flowKey = baseKey(p.key.replace(/-bleed$/, ""));
+              const isHl = () => effectiveHighlight() === flowKey;
+              const tint = () => isHl() ? bleedTintForFlow(flowKey) : null;
+              return (
+                <>
+                  <Show when={tint()}><path d={p.d} fill={tint()!} opacity={0.9} /></Show>
+                  <path
+                    d={p.d} fill="url(#bleed-hatch)" opacity={isHl() ? 0.9 : 0.8}
+                    style={{ cursor: "default" }}
+                    onMouseEnter={() => { setHoveredLayer(flowKey); props.onFlowHover(flowKey); }}
+                    onMouseLeave={() => { setHoveredLayer(null); props.onFlowHover(null); }}
+                  />
+                </>
+              );
+            }}
+          </For>
 
           {/* playhead (follow mode) */}
           <Show when={playheadX() !== null}>
