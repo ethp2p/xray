@@ -684,6 +684,8 @@ function StreamGraph(props: {
   theme: ThemeName;
   highlightedFlow: string | null;
   onFlowHover: (flow: string | null) => void;
+  followMode?: boolean;
+  slotStartNs?: number;
 }) {
   const [hoverX, setHoverX] = createSignal<number | null>(null);
   const [hoveredLayer, setHoveredLayer] = createSignal<string | null>(null);
@@ -752,6 +754,22 @@ function StreamGraph(props: {
   const streamOp = () => 0.65;
   const dimOp = () => props.theme === "dark" ? 0.12 : 0.08;
   const n = () => props.points.length;
+
+  const [playheadX, setPlayheadX] = createSignal<number | null>(null);
+  createEffect(() => {
+    if (!props.followMode || !props.slotStartNs) { setPlayheadX(null); return; }
+    const startMs = props.slotStartNs / 1e6;
+    let raf: number;
+    const tick = () => {
+      const elapsed = Date.now() - startMs;
+      const frac = Math.min(elapsed / SLOT_DURATION_MS, 1);
+      setPlayheadX(frac * stream().W);
+      if (frac < 1) raf = requestAnimationFrame(tick);
+      else setPlayheadX(null);
+    };
+    raf = requestAnimationFrame(tick);
+    onCleanup(() => cancelAnimationFrame(raf));
+  });
 
   const baseKey = (k: string) => k.replace(/-(?:in|out)$/, "");
 
@@ -846,6 +864,46 @@ function StreamGraph(props: {
               </>
             );
           })}
+
+          {/* playhead (follow mode) */}
+          <Show when={playheadX() !== null}>
+            <line
+              x1={playheadX()!} y1={0} x2={playheadX()!} y2={stream().H}
+              stroke="var(--hi)" stroke-width={1} opacity={0.6}
+            />
+          </Show>
+
+          {/* y-axis ticks */}
+          {(() => {
+            const { H } = stream();
+            const mid = H / 2;
+            const pad = 20;
+            let maxVal = 1;
+            for (const pt of props.points) {
+              let up = 0, down = 0;
+              for (const l of layers()) { up += getOut(pt, l.key); down += getIn(pt, l.key); }
+              maxVal = Math.max(maxVal, up, down);
+            }
+            const niceStep = (v: number) => {
+              const mag = Math.pow(10, Math.floor(Math.log10(v)));
+              const r = v / mag;
+              return mag * (r <= 1 ? 1 : r <= 2 ? 2 : r <= 5 ? 5 : 10);
+            };
+            const step = niceStep(maxVal / 3);
+            if (step <= 0) return null;
+            const ticks: number[] = [];
+            for (let v = step; v <= maxVal; v += step) ticks.push(v);
+            const scale = (mid - pad) / maxVal;
+            const fmt = (v: number) => v >= 1048576 ? (v / 1048576).toFixed(1) + "M" : v >= 1024 ? (v / 1024).toFixed(0) + "K" : String(v);
+            return ticks.map(v => (
+              <>
+                <line x1={0} y1={mid - v * scale} x2={stream().W} y2={mid - v * scale} stroke="var(--2)" stroke-width={0.3} />
+                <line x1={0} y1={mid + v * scale} x2={stream().W} y2={mid + v * scale} stroke="var(--2)" stroke-width={0.3} />
+                <text x={stream().W - 4} y={mid - v * scale - 3} fill="var(--3)" font-size="9" font-family="var(--m)" text-anchor="end">{fmt(v)}</text>
+                <text x={stream().W - 4} y={mid + v * scale + 10} fill="var(--3)" font-size="9" font-family="var(--m)" text-anchor="end">{fmt(v)}</text>
+              </>
+            ));
+          })()}
 
           {/* hover crosshair */}
           <Show when={hoverX() !== null}>
@@ -1307,7 +1365,10 @@ export default function App() {
           {wsStatus()}
         </span>
         <Show when={followMode() && wsStatus() === "connected"}>
-          <span style={{ "font-family": "var(--m)", "font-size": "var(--t-xs)", color: "var(--3)" }}>follow</span>
+          <span style={{
+            "font-family": "var(--m)", "font-size": "var(--t-xs)", color: "var(--3)",
+            border: "1px solid var(--2)", "border-radius": "9px", padding: "1px 8px",
+          }}>follow mode: on</span>
         </Show>
 
         <Show when={peerCount() !== null}>
@@ -1614,6 +1675,8 @@ export default function App() {
               theme={theme()}
               highlightedFlow={highlightedFlow()}
               onFlowHover={setHighlightedFlow}
+              followMode={followMode()}
+              slotStartNs={liveDetail()?.summary?.slot_start_ns}
             />
           </div>
 
