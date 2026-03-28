@@ -47,7 +47,9 @@ func (l *IngestListener) ListenAndServe(ctx context.Context, address string) err
 
 	network := wire.InferNetwork(address)
 	if network == "unix" {
-		os.Remove(address)
+		if err := os.Remove(address); err != nil && !os.IsNotExist(err) {
+			log.Printf("warning: could not remove stale socket %s: %v", address, err)
+		}
 	}
 
 	ln, err := net.Listen(network, address)
