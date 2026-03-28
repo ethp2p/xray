@@ -1,8 +1,10 @@
 package introspector
 
 import (
+	"compress/gzip"
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -64,7 +66,7 @@ func (s *Server) Handler() http.Handler {
 		fs := http.FileServer(http.Dir(s.staticDir))
 		mux.Handle("/", fs)
 	}
-	return mux
+	return gzipHandler(mux)
 }
 
 func (s *Server) SetStaticDir(dir string) { s.staticDir = dir }
@@ -320,4 +322,27 @@ func (s *Server) writeToClients(clients []*websocket.Conn, msg wsMessage) {
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+type gzipResponseWriter struct {
+	io.Writer
+	http.ResponseWriter
+}
+
+func (w gzipResponseWriter) Write(b []byte) (int, error) {
+	return w.Writer.Write(b)
+}
+
+func gzipHandler(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		gz, _ := gzip.NewWriterLevel(w, gzip.BestSpeed)
+		defer gz.Close()
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Del("Content-Length")
+		next.ServeHTTP(gzipResponseWriter{Writer: gz, ResponseWriter: w}, r)
+	})
 }
