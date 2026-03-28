@@ -1631,26 +1631,53 @@ export default function App() {
 
             {/* ── Peers view ── */}
             <Show when={view() === "peers"}>
+              <div style={{
+                padding: "6px 12px", "font-family": "var(--m)", "font-size": "var(--t-sm)",
+                color: "var(--3)", "border-bottom": "1px solid var(--2)",
+              }}>{livePeers().length} peers</div>
               <For each={livePeers()}>
-                {(p) => (
-                  <div style={{
-                    padding: "6px 12px", display: "flex", "align-items": "center",
-                    gap: "8px", "border-bottom": "1px solid var(--1)",
-                  }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = "var(--hover)"; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-                  >
-                    <div style={{ flex: 1, "min-width": 0 }}>
-                      <div style={{
-                        "font-family": "var(--m)", "font-size": "var(--t-md)", color: "var(--fg)",
-                        overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap",
-                      }}>{p.peer_id.length > 20 ? p.peer_id.slice(0, 8) + "..." + p.peer_id.slice(-8) : p.peer_id}</div>
-                      <div style={{ "font-family": "var(--m)", "font-size": "var(--t-sm)", color: "var(--3)", "margin-top": "1px" }}>
-                        {p.connections?.length ?? 0} conn &middot; {p.connections?.[0]?.direction ?? "unknown"} &middot; {p.connections?.[0]?.remote_addr ?? ""}
+                {(p) => {
+                  const conns = () => p.connections ?? [];
+                  const inbound = () => conns().filter(c => c.direction === "inbound").length;
+                  const outbound = () => conns().filter(c => c.direction === "outbound").length;
+                  const transport = () => {
+                    const t = new Set(conns().map(c => c.transport).filter(Boolean));
+                    return t.size > 0 ? [...t].join("/") : "";
+                  };
+                  const addr = () => conns()[0]?.remote_addr ?? "";
+                  const addrShort = () => {
+                    const a = addr();
+                    const m = a.match(/\/ip[46]\/([^/]+)/);
+                    return m ? m[1] : a;
+                  };
+                  return (
+                    <div style={{
+                      padding: "6px 12px", display: "flex", "align-items": "center",
+                      gap: "8px", "border-bottom": "1px solid var(--1)",
+                    }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = "var(--hover)"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                    >
+                      <span style={{
+                        width: "5px", height: "5px", "flex-shrink": 0,
+                        background: inbound() > 0 && outbound() > 0 ? "var(--fg)" : inbound() > 0 ? "var(--proto-gsub)" : "var(--proto-reqr)",
+                      }} />
+                      <div style={{ flex: 1, "min-width": 0 }}>
+                        <div style={{
+                          "font-family": "var(--m)", "font-size": "var(--t-md)", color: "var(--fg)",
+                          overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap",
+                        }}>{p.peer_id.length > 20 ? p.peer_id.slice(0, 8) + "\u2026" + p.peer_id.slice(-8) : p.peer_id}</div>
+                        <div style={{ "font-family": "var(--m)", "font-size": "var(--t-xs)", color: "var(--3)", "margin-top": "1px" }}>
+                          {addrShort()}
+                        </div>
+                      </div>
+                      <div style={{ "font-family": "var(--m)", "font-size": "var(--t-xs)", color: "var(--3)", "text-align": "right", "flex-shrink": 0 }}>
+                        <div>{inbound()}in {outbound()}out</div>
+                        <Show when={transport()}><div>{transport()}</div></Show>
                       </div>
                     </div>
-                  </div>
-                )}
+                  );
+                }}
               </For>
               <Show when={livePeers().length === 0}>
                 <div style={{ padding: "24px 12px", "text-align": "center", color: "var(--3)", "font-family": "var(--m)", "font-size": "var(--t-md)" }}>

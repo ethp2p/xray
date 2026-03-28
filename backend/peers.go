@@ -90,6 +90,9 @@ func (m *PeerMap) CloseConnection(connAlias uint64) {
 func (m *PeerMap) ListPeers() []PeerSummary {
 	result := make([]PeerSummary, 0, len(m.peers))
 	for _, ps := range m.peers {
+		if len(ps.Connections) == 0 {
+			continue
+		}
 		summary := PeerSummary{
 			PeerID:      peer.ID(ps.PeerID).String(),
 			FirstSeenNs: ps.FirstSeenNs,
@@ -104,7 +107,13 @@ func (m *PeerMap) ListPeers() []PeerSummary {
 }
 
 func (m *PeerMap) Count() int {
-	return len(m.peers)
+	n := 0
+	for _, ps := range m.peers {
+		if len(ps.Connections) > 0 {
+			n++
+		}
+	}
+	return n
 }
 
 func (m *PeerMap) Clear() {
