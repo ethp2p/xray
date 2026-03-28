@@ -1450,7 +1450,14 @@ export default function App() {
         display: "flex", "align-items": "center", padding: "0 16px",
         gap: "12px", "flex-shrink": 0,
       }}>
-        <span style={{ "font-family": "var(--m)", "font-size": "var(--t-lg)", "font-weight": "700", color: "var(--hi)", "letter-spacing": "var(--track-caps)" }}>ETHEREUM WIRETAP</span>
+        <span style={{ display: "inline-flex", "align-items": "center", gap: "8px", "font-family": "var(--m)", "font-size": "var(--t-lg)", "font-weight": "700", color: "var(--hi)", "letter-spacing": "var(--track-caps)" }}>
+          <svg width="14" height="22" viewBox="0 0 14 22" fill="none" style={{ "flex-shrink": 0 }}>
+            <path d="M7 0 L0 11.2 L7 8.4 L14 11.2 Z" stroke="currentColor" stroke-width="1" fill="none" stroke-linejoin="round" />
+            <path d="M7 8.4 L0 11.2 L7 15.2 L14 11.2 Z" stroke="currentColor" stroke-width="1" fill="none" stroke-linejoin="round" opacity="0.5" />
+            <path d="M0 12.6 L7 22 L14 12.6 L7 16.6 Z" stroke="currentColor" stroke-width="1" fill="none" stroke-linejoin="round" />
+          </svg>
+          ETHEREUM WIRETAP
+        </span>
         <div style={{ flex: 1 }} />
 
         {/* Connection status */}
@@ -1956,30 +1963,31 @@ export default function App() {
                                 onMouseLeave={() => setHighlightedFlow(null)}
                               >
                                 <td style={{
-                                  padding: "5px 10px", "white-space": "nowrap",
+                                  padding: "4px 10px", "white-space": "nowrap",
                                   color: isHl() ? "var(--hi)" : "var(--fg)",
+                                  "vertical-align": "middle",
                                 }}>
-                                  <span style={{ display: "inline-flex", "align-items": "center", gap: "6px" }}>
-                                    <span style={{ color: "var(--3)", width: "12px", display: "inline-block", "font-size": "var(--t-md)" }}>
+                                  <span style={{ display: "flex", "align-items": "center", gap: "6px", height: "18px" }}>
+                                    <span style={{ color: "var(--3)", width: "12px", "flex-shrink": 0, "text-align": "center", "font-size": "var(--t-md)", "line-height": "1" }}>
                                       {hasChildren ? (isOpen() ? "\u25BE" : "\u25B8") : ""}
                                     </span>
                                     <span style={{
                                       width: "6px", height: "6px",
                                       background: topicColor(row.flow, theme()),
-                                      "flex-shrink": 0, display: "inline-block",
+                                      "flex-shrink": 0,
                                     }} />
                                     {row.flow.replace(/_/g, " ")}
                                   </span>
                                 </td>
-                                <td style={{ padding: "5px 6px", "border-right": "1px solid var(--1)" }}>{chip(row.protocol)}</td>
-                                <td style={{ padding: "5px 10px", "text-align": "right", color: "var(--fg)", "white-space": "nowrap", "border-left": "2px solid var(--2)", "border-right": "1px solid var(--1)" }}>{fmtPair(row.dataIn, row.dataOut)}</td>
+                                <td style={{ padding: "4px 6px", "vertical-align": "middle", "border-right": "1px solid var(--1)" }}>{chip(row.protocol)}</td>
+                                <td style={{ padding: "4px 10px", "text-align": "right", "vertical-align": "middle", color: "var(--fg)", "white-space": "nowrap", "border-left": "2px solid var(--2)", "border-right": "1px solid var(--1)" }}>{fmtPair(row.dataIn, row.dataOut)}</td>
                                 <For each={activeControlKinds()}>
                                   {(kind, i) => {
                                     const cv = row.control[kind];
                                     const hasData = cv && (cv.in > 0 || cv.out > 0);
                                     return (
                                       <td style={{
-                                        padding: "5px 8px", "text-align": "right",
+                                        padding: "4px 8px", "text-align": "right", "vertical-align": "middle",
                                         color: hasData ? "var(--3)" : "var(--2)", "font-size": "var(--t-sm)",
                                         "white-space": "nowrap",
                                         "border-left": i() === 0 ? "2px solid var(--2)" : "1px solid var(--1)",
@@ -1987,7 +1995,7 @@ export default function App() {
                                     );
                                   }}
                                 </For>
-                                <td style={{ padding: "5px 10px", "text-align": "right", "white-space": "nowrap", background: "rgba(232, 118, 118, 0.06)", "border-left": "2px solid var(--2)", color: row.bleedIn + row.bleedOut > 50 ? "var(--fg)" : "var(--2)" }}>{fmtPair(row.bleedIn, row.bleedOut)}</td>
+                                <td style={{ padding: "4px 10px", "text-align": "right", "vertical-align": "middle", "white-space": "nowrap", background: "rgba(232, 118, 118, 0.06)", "border-left": "2px solid var(--2)", color: row.bleedIn + row.bleedOut > 50 ? "var(--fg)" : "var(--2)" }}>{fmtPair(row.bleedIn, row.bleedOut)}</td>
                               </tr>
 
                               {/* Level 2: child rows (individual topics within a grouped flow) */}
