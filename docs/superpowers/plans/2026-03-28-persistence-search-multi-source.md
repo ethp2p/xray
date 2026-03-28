@@ -591,7 +591,7 @@ Run: `go test ./introspector/ -run TestPeerMap -v`
 // introspector/peers.go
 package introspector
 
-import "encoding/base64"
+import "github.com/libp2p/go-libp2p/core/peer"
 
 type ConnState struct {
     PeerAlias  uint64 `json:"-"`
@@ -682,7 +682,7 @@ func (m *PeerMap) ListPeers() []PeerSummary {
     result := make([]PeerSummary, 0, len(m.peers))
     for _, ps := range m.peers {
         summary := PeerSummary{
-            PeerID:      base64.RawURLEncoding.EncodeToString(ps.PeerID),
+            PeerID:      peer.ID(ps.PeerID).String(),
             FirstSeenNs: ps.FirstSeenNs,
             LastSeenNs:  ps.LastSeenNs,
         }
@@ -952,14 +952,24 @@ func (l *IngestListener) handleConnection(ctx context.Context, conn net.Conn)
 1. Read `ClientHello` via codec
 2. Validate `protocol_version`; close connection if unsupported
 3. Derive `source_id` from `peer_id` using `peer.ID(hello.PeerId).String()`
-4. Cancel any existing session for this source_id (session exclusivity):
+4. Cancel any existing session for this source_id (session exclusivity).
+   Store both the cancel func and the net.Conn so the old connection can
+   be forcibly closed (a blocked `ReadEnvelope` on a net.Conn won't exit
+   from context cancellation alone):
    ```go
+   type activeSession struct {
+       cancel func()
+       conn   net.Conn
+   }
+   // sessions map[string]*activeSession
+
    l.mu.Lock()
-   if cancel, ok := l.sessions[sourceID]; ok {
-       cancel() // stops the old goroutine and closes its connection
+   if old, ok := l.sessions[sourceID]; ok {
+       old.cancel()
+       old.conn.Close() // unblocks any pending Read
    }
    ctx, cancel := context.WithCancel(l.ctx)
-   l.sessions[sourceID] = cancel
+   l.sessions[sourceID] = &activeSession{cancel: cancel, conn: conn}
    l.mu.Unlock()
    ```
 5. Send `ServerHello` with assigned source_id
@@ -1095,12 +1105,13 @@ for _, meta := range metas {
 
 // Wire finalization: processor -> buffered channel -> storage goroutine
 finalizeCh := make(chan introspector.FinalizedSlot, 64)
+// Blocking send: persistence is the only path into historical storage,
+// so we must not drop finalized slots. Backpressure is acceptable here
+// because finalization happens at most once per 12 seconds per source,
+// and the persistence goroutine writes at ~1ms per slot. A channel of
+// 64 gives >12 minutes of buffer before blocking the ingest goroutine.
 processor.SetOnFinalize(func(sourceID string, detail introspector.SlotDetail) {
-    select {
-    case finalizeCh <- introspector.FinalizedSlot{SourceID: sourceID, Detail: detail}:
-    default:
-        log.Printf("finalize channel full, dropping slot %d", detail.Summary.Slot)
-    }
+    finalizeCh <- introspector.FinalizedSlot{SourceID: sourceID, Detail: detail}
 })
 
 // Single-writer persistence goroutine
