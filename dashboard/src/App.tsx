@@ -1637,16 +1637,11 @@ export default function App() {
               }}>{livePeers().length} peers</div>
               <For each={livePeers()}>
                 {(p) => {
-                  const conns = () => p.connections ?? [];
-                  const inbound = () => conns().filter(c => c.direction === "inbound").length;
-                  const outbound = () => conns().filter(c => c.direction === "outbound").length;
-                  const transport = () => {
-                    const t = new Set(conns().map(c => c.transport).filter(Boolean));
-                    return t.size > 0 ? [...t].join("/") : "";
-                  };
-                  const addr = () => conns()[0]?.remote_addr ?? "";
+                  const conn = () => p.connections?.[0];
+                  const dir = () => conn()?.direction ?? "unknown";
+                  const transport = () => conn()?.transport ?? "";
                   const addrShort = () => {
-                    const a = addr();
+                    const a = conn()?.remote_addr ?? "";
                     const m = a.match(/\/ip[46]\/([^/]+)/);
                     return m ? m[1] : a;
                   };
@@ -1660,7 +1655,7 @@ export default function App() {
                     >
                       <span style={{
                         width: "5px", height: "5px", "flex-shrink": 0,
-                        background: inbound() > 0 && outbound() > 0 ? "var(--fg)" : inbound() > 0 ? "var(--proto-gsub)" : "var(--proto-reqr)",
+                        background: dir() === "inbound" ? "var(--proto-gsub)" : "var(--proto-reqr)",
                       }} />
                       <div style={{ flex: 1, "min-width": 0 }}>
                         <div style={{
@@ -1672,7 +1667,7 @@ export default function App() {
                         </div>
                       </div>
                       <div style={{ "font-family": "var(--m)", "font-size": "var(--t-xs)", color: "var(--3)", "text-align": "right", "flex-shrink": 0 }}>
-                        <div>{inbound()}in {outbound()}out</div>
+                        <div>{dir()}</div>
                         <Show when={transport()}><div>{transport()}</div></Show>
                       </div>
                     </div>
