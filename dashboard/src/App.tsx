@@ -67,7 +67,7 @@ const ALL_TOPICS = Object.values(TOPICS_BY_PROTO).flat();
 const TOPIC_HUES: Record<string, number> = {};
 {
   const hues = [
-    30, 195, 55, 140, 275, 100, 335, 15, 175, 240,
+    30, 195, 275, 140, 100, 55, 335, 15, 175, 240,
     70, 305, 160, 210, 120, 350, 45, 185, 260, 90,
     5, 225,
   ];
@@ -708,14 +708,18 @@ function StreamGraph(props: {
   const effectiveHighlight = () => props.highlightedFlow ?? hoveredLayer();
 
   // Slot lifecycle ordering: flows appear roughly in this sequence within a slot
-  const FLOW_ORDER: Record<string, number> = {
-    beacon_block: 0, blob_sidecar: 1, data_column_sidecar: 2,
-    attestation: 3, beacon_attestation: 3,
-    beacon_aggregate_and_proof: 4, sync_committee: 5,
-    sync_committee_contribution_and_proof: 6, voluntary_exit: 7,
-    proposer_slashing: 8, attester_slashing: 9,
-  };
-  const flowOrder = (key: string) => FLOW_ORDER[key] ?? 50;
+  const FLOW_ORDER: [string, number][] = [
+    ["beacon_block", 0], ["blob_sidecar", 1], ["data_column_sidecar", 2],
+    ["attestation", 3], ["beacon_aggregate_and_proof", 4], ["sync_committee", 5],
+    ["sync_committee_contribution_and_proof", 6], ["voluntary_exit", 7],
+    ["proposer_slashing", 8], ["attester_slashing", 9],
+  ];
+  const FLOW_ORDER_MAP = Object.fromEntries(FLOW_ORDER) as Record<string, number>;
+  const flowOrder = (key: string) => FLOW_ORDER_MAP[key] ?? 50;
+
+  const legendItems = createMemo((): Layer[] =>
+    FLOW_ORDER.map(([flow]) => ({ key: flow, color: topicColor(flow, props.theme), label: flow.replace(/_/g, " ") }))
+  );
 
   const layers = createMemo((): Layer[] => {
     const totals: Record<string, number> = {};
@@ -1077,7 +1081,7 @@ function StreamGraph(props: {
           padding: "6px 8px", display: "flex", "flex-direction": "column", gap: "2px",
           "border-left": "1px solid var(--1)",
         }}>
-          <For each={layers()}>
+          <For each={legendItems()}>
             {(l) => (
               <span
                 on:mouseenter={() => { setHoveredLayer(l.key); props.onFlowHover(l.key); }}
