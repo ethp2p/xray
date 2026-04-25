@@ -15,7 +15,7 @@ import (
 	"github.com/libp2p/go-msgio/protoio"
 
 	"github.com/ethp2p/xray"
-	"github.com/ethp2p/xray/gossipsub"
+	"github.com/ethp2p/xray/internal/gossipsub"
 	wiretappb "github.com/ethp2p/xray/proto/wiretap"
 	pspb "github.com/libp2p/go-libp2p-pubsub/pb"
 )

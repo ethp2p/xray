@@ -4,23 +4,25 @@ import (
 	"strconv"
 	"strings"
 
-	gossipsub "github.com/ethp2p/xray/gossipsub"
+	"github.com/ethp2p/xray"
+	gossipsub "github.com/ethp2p/xray/internal/gossipsub"
 	pubsubpb "github.com/libp2p/go-libp2p-pubsub/pb"
 )
 
+// Tag names re-exported from the public xray package so that internal callers
+// don't redefine them.
 const (
-	TagDecodedSlot = "eth.payload.slot"
-	TagDecodedFrom = "eth.payload.from"
+	TagDecodedSlot = xray.TagDecodedSlot
+	TagDecodedFrom = xray.TagDecodedFrom
 
-	TagProposerIndex    = "eth.proposer_index"
-	TagAttestationCount = "eth.attestation_count"
-	TagBlobCommitments  = "eth.blob_commitments"
-	TagTxCount          = "eth.tx_count"
-	TagSidecarIndex     = "eth.sidecar_index"
+	TagProposerIndex    = xray.TagProposerIndex
+	TagAttestationCount = xray.TagAttestationCount
+	TagBlobCommitments  = xray.TagBlobCommitments
+	TagTxCount          = xray.TagTxCount
+	TagSidecarIndex     = xray.TagSidecarIndex
 
-	// Re-exported from gossipsub for consumers who import only this package.
-	TagTopic       = gossipsub.TagTopic
-	TagMessageKind = gossipsub.TagMessageKind
+	TagTopic       = xray.TagTopic
+	TagMessageKind = xray.TagMessageKind
 )
 
 // GossipSubDecoder returns a gossipsub.Decoder configured for Ethereum networks.

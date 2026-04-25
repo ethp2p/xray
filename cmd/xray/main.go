@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/ethp2p/xray/backend"
-	"github.com/ethp2p/xray/eth"
+	"github.com/ethp2p/xray/internal/backend"
+	"github.com/ethp2p/xray/internal/eth"
 )
 
 func main() {

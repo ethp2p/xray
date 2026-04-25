@@ -26,8 +26,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ethp2p/xray"
-	"github.com/ethp2p/xray/backend"
-	"github.com/ethp2p/xray/eth"
+	"github.com/ethp2p/xray/internal/backend"
+	"github.com/ethp2p/xray/internal/eth"
 )
 
 type liveMessage struct {

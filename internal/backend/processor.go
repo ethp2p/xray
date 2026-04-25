@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ethp2p/xray/eth"
+	"github.com/ethp2p/xray/internal/eth"
 	wiretappb "github.com/ethp2p/xray/proto/wiretap"
 )
 

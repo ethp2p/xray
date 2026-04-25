@@ -2,8 +2,8 @@ package backend
 
 import (
 	"github.com/ethp2p/xray"
-	"github.com/ethp2p/xray/eth"
-	gs "github.com/ethp2p/xray/gossipsub"
+	"github.com/ethp2p/xray/internal/eth"
+	gs "github.com/ethp2p/xray/internal/gossipsub"
 )
 
 type Tag struct {

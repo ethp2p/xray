@@ -15,11 +15,12 @@ import (
 // DefaultMaxRPCSize matches pubsub.DefaultMaxMessageSize (1 MiB).
 const DefaultMaxRPCSize = 1 << 20
 
-// Tag names populated by the decoder.
+// Tag names populated by the decoder. Re-exported from the public xray package
+// so the SDK exposes a single set of constants.
 const (
-	TagTopic       = "topic"
-	TagMessageKind = "message_kind"
-	TagFraming     = "_framing"
+	TagTopic       = xray.TagTopic
+	TagMessageKind = xray.TagMessageKind
+	TagFraming     = xray.TagFraming
 )
 
 // MessageDecoder processes an application-level payload within a gossipsub publish message.

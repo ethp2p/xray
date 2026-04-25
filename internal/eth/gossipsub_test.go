@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/ethp2p/xray"
-	gossipsub "github.com/ethp2p/xray/gossipsub"
+	gossipsub "github.com/ethp2p/xray/internal/gossipsub"
 	"github.com/gogo/protobuf/proto"
 	pubsubpb "github.com/libp2p/go-libp2p-pubsub/pb"
 )
