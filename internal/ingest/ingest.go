@@ -101,12 +101,20 @@ func (l *IngestListener) handleConnection(conn net.Conn) {
 	l.mu.Unlock()
 
 	defer func() {
-		l.registry.SetConnected(sourceID, false)
+		// Only clear Connected if this session still owns the slot. A faster
+		// reconnect may have already replaced us; calling SetConnected(false)
+		// unconditionally would mark the live successor as disconnected.
 		l.mu.Lock()
+		stillOwns := false
 		if sess, ok := l.sessions[sourceID]; ok && sess.conn == conn {
 			delete(l.sessions, sourceID)
+			stillOwns = true
 		}
 		l.mu.Unlock()
+
+		if stillOwns {
+			l.registry.SetConnected(sourceID, false)
+		}
 		conn.Close()
 		cancel()
 	}()

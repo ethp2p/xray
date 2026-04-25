@@ -173,7 +173,7 @@ func (s *SinkIngest) sendSnapshot() error {
 		return errors.New("no connection")
 	}
 
-	for _, env := range snapshotEnvelopes(s.emitter.Snapshot()) {
+	for _, env := range snapshotEnvelopes(s.emitter.snapshot()) {
 		if err := wire.WriteEnvelope(conn, env); err != nil {
 			return err
 		}

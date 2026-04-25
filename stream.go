@@ -136,7 +136,18 @@ type wrappedNetwork struct {
 // allocating a peer alias for the remote peer if it is new. Returns the
 // wrappedConn (created or pre-existing), the upsert, and whether the
 // connection was newly tracked.
+//
+// String interning happens before n.mu is taken: Intern emits a StringDef
+// envelope on cache miss, which fans out to sinks (e.g. SinkFile.Write takes
+// SinkFile.mu). The periodic snapshot loop on SinkFile takes those locks in
+// the opposite order — SinkFile.mu then n.mu via Emitter.Snapshot — so
+// holding n.mu across Intern would deadlock under contention.
 func (n *wrappedNetwork) connectionUpsertFor(conn network.Conn, connID uint32, openedAtNs int64) (*wrappedConn, *wiretappb.ConnectionUpsert, bool) {
+	state := conn.ConnState()
+	transportID := n.strings.Intern(state.Transport)
+	securityID := n.strings.Intern(string(state.Security))
+	muxerID := n.strings.Intern(string(state.StreamMultiplexer))
+
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
@@ -153,16 +164,15 @@ func (n *wrappedNetwork) connectionUpsertFor(conn network.Conn, connID uint32, o
 		n.peers[conn.RemotePeer()] = peerInfo
 	}
 
-	state := conn.ConnState()
 	upsert := &wiretappb.ConnectionUpsert{
 		ConnAlias:   uint64(connID),
 		PeerAlias:   peerInfo.alias,
 		RemoteAddr:  conn.RemoteMultiaddr().String(),
 		LocalAddr:   conn.LocalMultiaddr().String(),
 		Direction:   directionToIngest(directionFromNetwork(conn.Stat().Direction)),
-		TransportId: n.strings.Intern(state.Transport),
-		SecurityId:  n.strings.Intern(string(state.Security)),
-		MuxerId:     n.strings.Intern(string(state.StreamMultiplexer)),
+		TransportId: transportID,
+		SecurityId:  securityID,
+		MuxerId:     muxerID,
 		OpenedAtNs:  openedAtNs,
 	}
 
@@ -202,6 +212,23 @@ func (n *wrappedNetwork) removeAndGetConn(conn network.Conn) *wrappedConn {
 	}
 	n.mu.Unlock()
 	return wc
+}
+
+// removeStreamsForConn removes every tracked stream belonging to the given
+// connection alias and returns their stream aliases. Caller is responsible
+// for emitting StreamClosed envelopes for them — the conn is going away and
+// libp2p won't deliver per-stream Close/Reset for these.
+func (n *wrappedNetwork) removeStreamsForConn(connAlias uint32) []uint64 {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	var aliases []uint64
+	for id, u := range n.streamUpserts {
+		if u.ConnAlias == uint64(connAlias) {
+			aliases = append(aliases, u.StreamAlias)
+			delete(n.streamUpserts, id)
+		}
+	}
+	return aliases
 }
 
 func (n *wrappedNetwork) addStreamUpsert(u *wiretappb.StreamUpsert) {

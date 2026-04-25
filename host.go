@@ -217,11 +217,28 @@ func (n *notifiee) Disconnected(_ network.Network, conn network.Conn) {
 	if wc == nil {
 		return
 	}
+	closedAtNs := time.Now().UnixNano()
+
+	// libp2p does not deliver per-stream Close/Reset when a conn dies under
+	// open streams. Emit StreamClosed{CONN_CLOSED} for each so consumers can
+	// drop their decoder state instead of leaking it.
+	for _, alias := range n.net.removeStreamsForConn(wc.connID) {
+		n.emitter.Emit(&wiretappb.Envelope{
+			Payload: &wiretappb.Envelope_StreamClosed{
+				StreamClosed: &wiretappb.StreamClosed{
+					StreamAlias: alias,
+					ClosedAtNs:  closedAtNs,
+					Reason:      wiretappb.CloseReason_CLOSE_REASON_CONN_CLOSED,
+				},
+			},
+		})
+	}
+
 	n.emitter.Emit(&wiretappb.Envelope{
 		Payload: &wiretappb.Envelope_ConnectionClosed{
 			ConnectionClosed: &wiretappb.ConnectionClosed{
 				ConnAlias:  uint64(wc.connID),
-				ClosedAtNs: time.Now().UnixNano(),
+				ClosedAtNs: closedAtNs,
 			},
 		},
 	})

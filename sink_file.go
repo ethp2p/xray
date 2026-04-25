@@ -89,7 +89,7 @@ func (s *SinkFile) writeEnvelopeLocked(env *wiretappb.Envelope) error {
 }
 
 func (s *SinkFile) writeSnapshotLocked() error {
-	snap := s.emitter.Snapshot()
+	snap := s.emitter.snapshot()
 	envs := snapshotEnvelopes(snap)
 	for _, env := range envs {
 		if err := s.writeEnvelopeLocked(env); err != nil {
@@ -132,32 +132,32 @@ func (s *SinkFile) snapshotLoop() {
 	}
 }
 
-// snapshotEnvelopes converts a Snapshot into a sequence of envelopes wrapped
+// snapshotEnvelopes converts a snapshot into a sequence of envelopes wrapped
 // between SnapshotStart and SnapshotEnd markers. Used by both SinkFile and
 // SinkIngest to bring a fresh consumer up to date.
-func snapshotEnvelopes(snap Snapshot) []*wiretappb.Envelope {
-	envs := make([]*wiretappb.Envelope, 0, 2+len(snap.Strings)+len(snap.Peers)+len(snap.Connections)+len(snap.Streams))
+func snapshotEnvelopes(snap snapshot) []*wiretappb.Envelope {
+	envs := make([]*wiretappb.Envelope, 0, 2+len(snap.strings)+len(snap.peers)+len(snap.connections)+len(snap.streams))
 	envs = append(envs, &wiretappb.Envelope{
 		Payload: &wiretappb.Envelope_SnapshotStart{SnapshotStart: &wiretappb.SnapshotStart{}},
 	})
-	for id, value := range snap.Strings {
+	for id, value := range snap.strings {
 		envs = append(envs, &wiretappb.Envelope{
 			Payload: &wiretappb.Envelope_StringDef{
 				StringDef: &wiretappb.StringDef{Id: uint32(id), Value: value},
 			},
 		})
 	}
-	for _, p := range snap.Peers {
+	for _, p := range snap.peers {
 		envs = append(envs, &wiretappb.Envelope{
 			Payload: &wiretappb.Envelope_PeerUpsert{PeerUpsert: p},
 		})
 	}
-	for _, c := range snap.Connections {
+	for _, c := range snap.connections {
 		envs = append(envs, &wiretappb.Envelope{
 			Payload: &wiretappb.Envelope_ConnectionUpsert{ConnectionUpsert: c},
 		})
 	}
-	for _, st := range snap.Streams {
+	for _, st := range snap.streams {
 		envs = append(envs, &wiretappb.Envelope{
 			Payload: &wiretappb.Envelope_StreamUpsert{StreamUpsert: st},
 		})

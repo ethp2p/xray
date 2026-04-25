@@ -90,23 +90,23 @@ func (e *Emitter) addToBufferLocked(env *wiretappb.Envelope) {
 	}
 }
 
-// Snapshot represents the probe's current state, suitable for replaying to a
-// new sink as a sequence of upsert envelopes.
-type Snapshot struct {
-	Strings     []string
-	Peers       []*wiretappb.PeerUpsert
-	Connections []*wiretappb.ConnectionUpsert
-	Streams     []*wiretappb.StreamUpsert
+// snapshot is the probe's current state, replayed by SinkFile and SinkIngest
+// as a sequence of upsert envelopes when a fresh consumer attaches. Internal:
+// the wiretappb types are transport mechanics and should not leak through the
+// public SDK surface.
+type snapshot struct {
+	strings     []string
+	peers       []*wiretappb.PeerUpsert
+	connections []*wiretappb.ConnectionUpsert
+	streams     []*wiretappb.StreamUpsert
 }
 
-// Snapshot returns the current state. Callers replay it as envelopes to bring
-// a new consumer (file, ingest connection) up to date.
-func (e *Emitter) Snapshot() Snapshot {
-	snap := Snapshot{
-		Strings: e.strings.snapshot(),
+func (e *Emitter) snapshot() snapshot {
+	snap := snapshot{
+		strings: e.strings.snapshot(),
 	}
 	if e.net != nil {
-		snap.Peers, snap.Connections, snap.Streams = e.net.snapshot()
+		snap.peers, snap.connections, snap.streams = e.net.snapshot()
 	}
 	return snap
 }
