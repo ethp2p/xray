@@ -5,20 +5,20 @@ import (
 	"sync/atomic"
 	"time"
 
-	pb "github.com/ethp2p/xray/proto"
+	ingestpb "github.com/ethp2p/xray/proto/ingest"
 )
 
-// DefaultRingBufferSize is the default number of events to keep in the ring buffer.
+// DefaultRingBufferSize is the default number of envelopes to keep in the ring buffer.
 const DefaultRingBufferSize = 65536
 
 // Emitter is the event pipeline. It assigns sequence numbers, maintains a ring
-// buffer for catch-up, and fans out events to registered sinks.
+// buffer for catch-up, and fans out envelopes to registered sinks.
 type Emitter struct {
 	mu sync.Mutex
 
 	nextSeq uint64
 
-	buffer    []*pb.TraceEvent
+	buffer    []*ingestpb.Envelope
 	bufferIdx int
 	bufferLen int
 
@@ -27,9 +27,8 @@ type Emitter struct {
 	closed bool
 
 	// Collaborators set after construction.
-	strings    *stringInterner
-	net        *wrappedNetwork
-	ingestSink *SinkIngest
+	strings *stringInterner
+	net     *wrappedNetwork
 
 	nextPeerAlias atomic.Uint64
 	nextConnID    atomic.Uint32
@@ -42,11 +41,11 @@ func NewEmitter(bufferSize int) *Emitter {
 		bufferSize = DefaultRingBufferSize
 	}
 	return &Emitter{
-		buffer: make([]*pb.TraceEvent, bufferSize),
+		buffer: make([]*ingestpb.Envelope, bufferSize),
 	}
 }
 
-// NextConnID returns the next connection ID.
+// NextPeerAlias returns the next peer alias.
 func (e *Emitter) NextPeerAlias() uint64 {
 	return e.nextPeerAlias.Add(1) - 1
 }
@@ -61,9 +60,9 @@ func (e *Emitter) NextStreamID() uint32 {
 	return e.nextStreamID.Add(1) - 1
 }
 
-// Emit assigns a sequence number and timestamp, adds the event to the ring
-// buffer, and fans out to all sinks.
-func (e *Emitter) Emit(event *pb.TraceEvent) {
+// Emit assigns a sequence number and observed-at timestamp, adds the envelope
+// to the ring buffer, and fans out to all sinks.
+func (e *Emitter) Emit(env *ingestpb.Envelope) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -71,116 +70,55 @@ func (e *Emitter) Emit(event *pb.TraceEvent) {
 		return
 	}
 
-	event.Seq = e.nextSeq
+	env.Seq = e.nextSeq
 	e.nextSeq++
-	event.TimestampNs = time.Now().UnixNano()
+	env.ObservedAtNs = time.Now().UnixNano()
 
-	e.addToBufferLocked(event)
+	e.addToBufferLocked(env)
 
 	sinks := e.snapshotSinks()
-	fanOut(sinks, event)
+	for _, sink := range sinks {
+		sink.Write(env)
+	}
 }
 
-func (e *Emitter) addToBufferLocked(event *pb.TraceEvent) {
-	e.buffer[e.bufferIdx] = event
+func (e *Emitter) addToBufferLocked(env *ingestpb.Envelope) {
+	e.buffer[e.bufferIdx] = env
 	e.bufferIdx = (e.bufferIdx + 1) % len(e.buffer)
 	if e.bufferLen < len(e.buffer) {
 		e.bufferLen++
 	}
 }
 
-// EmitTraffic emits a traffic event with the given parameters.
-func (e *Emitter) EmitTraffic(streamID uint32, dir Direction, bytes int, tags []Tag) {
-	pbDir := directionToPb(dir)
-
-	var pbTags []*pb.Tag
-	if len(tags) > 0 {
-		pbTags = make([]*pb.Tag, len(tags))
-		for i, t := range tags {
-			nameID := e.strings.Intern(t.Name)
-			valueIDs := make([]uint32, len(t.Values))
-			for j, v := range t.Values {
-				valueIDs[j] = e.strings.Intern(v)
-			}
-			pbTags[i] = &pb.Tag{
-				NameId:   nameID,
-				ValueIds: valueIDs,
-			}
-		}
-	}
-
-	e.Emit(&pb.TraceEvent{
-		Event: &pb.TraceEvent_Traffic{
-			Traffic: &pb.Traffic{
-				StreamId:  streamID,
-				Direction: pbDir,
-				Bytes:     uint32(bytes),
-				Tags:      pbTags,
-			},
-		},
-	})
+// Snapshot represents the probe's current state, suitable for replaying to a
+// new sink as a sequence of upsert envelopes.
+type Snapshot struct {
+	Strings     []string
+	Peers       []*ingestpb.PeerUpsert
+	Connections []*ingestpb.ConnectionUpsert
+	Streams     []*ingestpb.StreamUpsert
 }
 
-// Snapshot returns a snapshot of the current state (strings, connections, streams).
-func (e *Emitter) Snapshot() *pb.Snapshot {
-	snap := &pb.Snapshot{
+// Snapshot returns the current state. Callers replay it as envelopes to bring
+// a new consumer (file, ingest connection) up to date.
+func (e *Emitter) Snapshot() Snapshot {
+	snap := Snapshot{
 		Strings: e.strings.snapshot(),
 	}
 	if e.net != nil {
-		snap.Connections, snap.Streams = e.net.snapshot()
+		snap.Peers, snap.Connections, snap.Streams = e.net.snapshot()
 	}
 	return snap
 }
 
-func (e *Emitter) ingestSnapshot() ingestSnapshot {
-	snap := ingestSnapshot{
-		strings: e.strings.snapshot(),
-	}
-	if e.net != nil {
-		snap.peers, snap.connections, snap.streams = e.net.ingestSnapshot()
-	}
-	return snap
-}
-
-// EventsFromSeq returns events starting from the given sequence number.
-// Returns nil if seq is no longer in the buffer (client too far behind).
-func (e *Emitter) EventsFromSeq(seq uint64) []*pb.TraceEvent {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	if e.bufferLen == 0 {
-		return nil
-	}
-
-	oldestIdx := (e.bufferIdx - e.bufferLen + len(e.buffer)) % len(e.buffer)
-	oldestSeq := e.buffer[oldestIdx].Seq
-	if seq < oldestSeq {
-		return nil
-	}
-
-	offset := int(seq - oldestSeq)
-	if offset >= e.bufferLen {
-		return []*pb.TraceEvent{}
-	}
-
-	startIdx := (oldestIdx + offset) % len(e.buffer)
-	count := e.bufferLen - offset
-
-	result := make([]*pb.TraceEvent, count)
-	for i := 0; i < count; i++ {
-		result[i] = e.buffer[(startIdx+i)%len(e.buffer)]
-	}
-	return result
-}
-
-// AddSink registers a sink to receive events.
+// AddSink registers a sink to receive envelopes.
 func (e *Emitter) AddSink(sink Sink) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.sinks = append(e.sinks, sink)
 }
 
-// RemoveSink unregisters a sink from receiving events.
+// RemoveSink unregisters a sink.
 func (e *Emitter) RemoveSink(sink Sink) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -205,18 +143,7 @@ func (e *Emitter) snapshotSinks() []Sink {
 	return result
 }
 
-func fanOut(sinks []Sink, event *pb.TraceEvent) {
-	for _, sink := range sinks {
-		sink.Write(event)
-	}
-}
-
-// Strings returns the string interner.
-func (e *Emitter) Strings() *stringInterner {
-	return e.strings
-}
-
-// SetClosed sets the closed flag to stop accepting new events.
+// SetClosed sets the closed flag to stop accepting new envelopes.
 func (e *Emitter) SetClosed(closed bool) {
 	e.mu.Lock()
 	defer e.mu.Unlock()

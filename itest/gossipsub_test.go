@@ -16,7 +16,7 @@ import (
 
 	"github.com/ethp2p/xray"
 	"github.com/ethp2p/xray/gossipsub"
-	pb "github.com/ethp2p/xray/proto"
+	ingestpb "github.com/ethp2p/xray/proto/ingest"
 	pspb "github.com/libp2p/go-libp2p-pubsub/pb"
 )
 
@@ -110,8 +110,8 @@ func TestGossipSub_TopicTagging(t *testing.T) {
 	var totalBytes uint64
 	for _, sink := range []*testSink{sink1, sink2} {
 		for _, evt := range sink.Events() {
-			if bw := evt.GetTraffic(); bw != nil {
-				totalBytes += uint64(bw.Bytes)
+			if c := evt.GetStreamChunk(); c != nil {
+				totalBytes += uint64(len(c.Data))
 			}
 		}
 	}
@@ -196,8 +196,8 @@ func TestGossipSub_PartialFrameHandling(t *testing.T) {
 	for _, sink := range []*testSink{sink1, sink2} {
 		events := sink.Events()
 		for _, evt := range events {
-			if bw := evt.GetTraffic(); bw != nil {
-				totalBytes += uint64(bw.Bytes)
+			if c := evt.GetStreamChunk(); c != nil {
+				totalBytes += uint64(len(c.Data))
 			}
 		}
 	}
@@ -229,7 +229,7 @@ func TestGossipSub_DecoderFallback(t *testing.T) {
 
 	sink1 := newTestSink()
 	tagCollector := newTagCollector()
-	host1, err := xray.Wrap(baseHost1,
+	host1, err := xray.Wiretap(baseHost1,
 		xray.WithDecoder(gossipsub.Decoder{}.Match, gossipsub.Decoder{}.New),
 		xray.WithOnMessage(tagCollector.Factory()),
 		xray.WithSink(sink1),
@@ -240,7 +240,7 @@ func TestGossipSub_DecoderFallback(t *testing.T) {
 	defer host1.Close()
 
 	sink2 := newTestSink()
-	host2, err := xray.Wrap(baseHost2,
+	host2, err := xray.Wiretap(baseHost2,
 		xray.WithDecoder(gossipsub.Decoder{}.Match, gossipsub.Decoder{}.New),
 		xray.WithOnMessage(tagCollector.Factory()),
 		xray.WithSink(sink2),
@@ -289,10 +289,10 @@ func TestGossipSub_DecoderFallback(t *testing.T) {
 	var foundTrafficEvent bool
 	events := sink1.Events()
 	for _, evt := range events {
-		if bw := evt.GetTraffic(); bw != nil && bw.Bytes > 0 {
+		if c := evt.GetStreamChunk(); c != nil && len(c.Data) > 0 {
 			foundTrafficEvent = true
-			if int(bw.Bytes) >= n {
-				t.Logf("found traffic event with %d bytes (wrote %d)", bw.Bytes, n)
+			if len(c.Data) >= n {
+				t.Logf("found stream chunk with %d bytes (wrote %d)", len(c.Data), n)
 			}
 		}
 	}
@@ -319,7 +319,7 @@ func TestGossipSub_ManualProtocolTraffic(t *testing.T) {
 
 	sink1 := newTestSink()
 	tagCollector := newTagCollector()
-	host1, err := xray.Wrap(baseHost1,
+	host1, err := xray.Wiretap(baseHost1,
 		xray.WithDecoder(gossipsub.Decoder{}.Match, gossipsub.Decoder{}.New),
 		xray.WithOnMessage(tagCollector.Factory()),
 		xray.WithSink(sink1),
@@ -330,7 +330,7 @@ func TestGossipSub_ManualProtocolTraffic(t *testing.T) {
 	defer host1.Close()
 
 	sink2 := newTestSink()
-	host2, err := xray.Wrap(baseHost2,
+	host2, err := xray.Wiretap(baseHost2,
 		xray.WithDecoder(gossipsub.Decoder{}.Match, gossipsub.Decoder{}.New),
 		xray.WithOnMessage(tagCollector.Factory()),
 		xray.WithSink(sink2),
@@ -433,7 +433,7 @@ func (tc *tagCollector) Topics() map[string]struct{} {
 
 type testSink struct {
 	mu      sync.Mutex
-	events  []*pb.TraceEvent
+	events  []*ingestpb.Envelope
 	strings map[uint32]string
 }
 
@@ -443,7 +443,7 @@ func newTestSink() *testSink {
 	}
 }
 
-func (s *testSink) Write(event *pb.TraceEvent) bool {
+func (s *testSink) Write(event *ingestpb.Envelope) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -457,10 +457,10 @@ func (s *testSink) Write(event *pb.TraceEvent) bool {
 
 func (s *testSink) Close() error { return nil }
 
-func (s *testSink) Events() []*pb.TraceEvent {
+func (s *testSink) Events() []*ingestpb.Envelope {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	result := make([]*pb.TraceEvent, len(s.events))
+	result := make([]*ingestpb.Envelope, len(s.events))
 	copy(result, s.events)
 	return result
 }
@@ -487,7 +487,7 @@ func setupTwoHostsWithPubsub(t *testing.T, ctx context.Context, tc *tagCollector
 	}
 
 	sink1 := newTestSink()
-	host1, err := xray.Wrap(baseHost1,
+	host1, err := xray.Wiretap(baseHost1,
 		xray.WithDecoder(gossipsub.Decoder{}.Match, gossipsub.Decoder{}.New),
 		xray.WithOnMessage(tc.Factory()),
 		xray.WithSink(sink1),
@@ -499,7 +499,7 @@ func setupTwoHostsWithPubsub(t *testing.T, ctx context.Context, tc *tagCollector
 	}
 
 	sink2 := newTestSink()
-	host2, err := xray.Wrap(baseHost2,
+	host2, err := xray.Wiretap(baseHost2,
 		xray.WithDecoder(gossipsub.Decoder{}.Match, gossipsub.Decoder{}.New),
 		xray.WithOnMessage(tc.Factory()),
 		xray.WithSink(sink2),

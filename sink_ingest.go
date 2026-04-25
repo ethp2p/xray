@@ -11,17 +11,10 @@ import (
 	"github.com/ethp2p/xray/wire"
 )
 
-type ingestSnapshot struct {
-	strings     []string
-	peers       []*ingestpb.PeerUpsert
-	connections []*ingestpb.ConnectionUpsert
-	streams     []*ingestpb.StreamUpsert
-}
-
-// SinkIngest dials the backend's ingest listener and streams the private
-// ingest protocol. On connect it performs a ClientHello/ServerHello handshake,
-// sends a full state snapshot, then forwards live events. It reconnects
-// automatically if the connection drops.
+// SinkIngest dials the backend's ingest listener and streams envelopes. On
+// connect it performs a ClientHello/ServerHello handshake and replays the
+// emitter's current state as a snapshot before forwarding live envelopes.
+// Reconnects automatically if the connection drops.
 type SinkIngest struct {
 	mu sync.Mutex
 
@@ -33,7 +26,7 @@ type SinkIngest struct {
 	bootID        []byte
 	startedAtNs   int64
 	waitForAttach bool
-	sourceID      string // assigned by backend
+	sourceID      string
 
 	conn           net.Conn
 	sendCh         chan *ingestpb.Envelope
@@ -41,11 +34,13 @@ type SinkIngest struct {
 	attached       chan struct{}
 	attachedClosed atomic.Bool
 	closed         atomic.Bool
-	nextSeq        atomic.Uint64
 }
 
-// NewSinkIngest creates a sink that dials the backend ingest listener.
-// The goroutine connects immediately and retries on failure.
+var _ Sink = (*SinkIngest)(nil)
+
+// NewSinkIngest creates a sink that dials the backend ingest listener and
+// streams envelopes. The connect goroutine starts immediately and retries on
+// failure.
 func NewSinkIngest(address string, emitter *Emitter, clientName string, localPeerID []byte, waitForAttach bool) *SinkIngest {
 	sink := &SinkIngest{
 		emitter:       emitter,
@@ -74,6 +69,20 @@ func (s *SinkIngest) WaitForAttach() error {
 	}
 }
 
+// Write enqueues an envelope for transmission. Drops silently if the buffer is
+// full; the emitter's ring buffer remains the source of truth for catch-up.
+func (s *SinkIngest) Write(env *ingestpb.Envelope) bool {
+	if s.closed.Load() {
+		return false
+	}
+	select {
+	case s.sendCh <- env:
+		return true
+	default:
+		return false
+	}
+}
+
 func (s *SinkIngest) Close() error {
 	if s.closed.Swap(true) {
 		return nil
@@ -90,8 +99,6 @@ func (s *SinkIngest) Close() error {
 	return nil
 }
 
-// connectLoop dials the backend, performs the handshake, sends the snapshot,
-// then runs the write pump. On any error it waits briefly and retries.
 func (s *SinkIngest) connectLoop() {
 	for {
 		select {
@@ -109,7 +116,6 @@ func (s *SinkIngest) connectLoop() {
 			continue
 		}
 
-		// Drain stale events queued during disconnect.
 		s.drainSendCh()
 
 		if err := s.sendSnapshot(); err != nil {
@@ -166,53 +172,18 @@ func (s *SinkIngest) sendSnapshot() error {
 		return errors.New("no connection")
 	}
 
-	s.nextSeq.Store(0)
-
-	if err := wire.WriteEnvelope(conn, s.nextEnvelope(&ingestpb.Envelope_SnapshotStart{
-		SnapshotStart: &ingestpb.SnapshotStart{},
-	})); err != nil {
-		return err
-	}
-
-	snap := s.emitter.ingestSnapshot()
-	for id, value := range snap.strings {
-		if err := wire.WriteEnvelope(conn, s.nextEnvelope(&ingestpb.Envelope_StringDef{
-			StringDef: &ingestpb.StringDef{Id: uint32(id), Value: value},
-		})); err != nil {
+	for _, env := range snapshotEnvelopes(s.emitter.Snapshot()) {
+		if err := wire.WriteEnvelope(conn, env); err != nil {
 			return err
 		}
 	}
-	for _, peer := range snap.peers {
-		if err := wire.WriteEnvelope(conn, s.nextEnvelope(&ingestpb.Envelope_PeerUpsert{
-			PeerUpsert: peer,
-		})); err != nil {
-			return err
-		}
-	}
-	for _, connection := range snap.connections {
-		if err := wire.WriteEnvelope(conn, s.nextEnvelope(&ingestpb.Envelope_ConnectionUpsert{
-			ConnectionUpsert: connection,
-		})); err != nil {
-			return err
-		}
-	}
-	for _, stream := range snap.streams {
-		if err := wire.WriteEnvelope(conn, s.nextEnvelope(&ingestpb.Envelope_StreamUpsert{
-			StreamUpsert: stream,
-		})); err != nil {
-			return err
-		}
-	}
-
-	return wire.WriteEnvelope(conn, s.nextEnvelope(&ingestpb.Envelope_SnapshotEnd{
-		SnapshotEnd: &ingestpb.SnapshotEnd{},
-	}))
+	return nil
 }
 
 func (s *SinkIngest) writePump() {
 	for {
 		select {
-		case event, ok := <-s.sendCh:
+		case env, ok := <-s.sendCh:
 			if !ok {
 				return
 			}
@@ -222,7 +193,7 @@ func (s *SinkIngest) writePump() {
 			if conn == nil {
 				return
 			}
-			if err := wire.WriteEnvelope(conn, event); err != nil {
+			if err := wire.WriteEnvelope(conn, env); err != nil {
 				return
 			}
 		case <-s.done:
@@ -247,114 +218,5 @@ func (s *SinkIngest) drainSendCh() {
 		default:
 			return
 		}
-	}
-}
-
-func (s *SinkIngest) offer(event *ingestpb.Envelope) {
-	if s.closed.Load() {
-		return
-	}
-	select {
-	case s.sendCh <- event:
-	default:
-	}
-}
-
-func (s *SinkIngest) EmitStringDef(id uint32, value string) {
-	s.offer(s.nextEnvelope(&ingestpb.Envelope_StringDef{
-		StringDef: &ingestpb.StringDef{Id: id, Value: value},
-	}))
-}
-
-func (s *SinkIngest) EmitPeerUpsert(alias uint64, peerID []byte) {
-	s.offer(s.nextEnvelope(&ingestpb.Envelope_PeerUpsert{
-		PeerUpsert: &ingestpb.PeerUpsert{
-			PeerAlias: alias,
-			PeerId:    append([]byte(nil), peerID...),
-		},
-	}))
-}
-
-func (s *SinkIngest) EmitConnectionUpsert(connection *ingestpb.ConnectionUpsert) {
-	s.offer(s.nextEnvelope(&ingestpb.Envelope_ConnectionUpsert{
-		ConnectionUpsert: connection,
-	}))
-}
-
-func (s *SinkIngest) EmitConnectionClosed(connAlias uint64, closedAtNs int64) {
-	s.offer(s.nextEnvelope(&ingestpb.Envelope_ConnectionClosed{
-		ConnectionClosed: &ingestpb.ConnectionClosed{
-			ConnAlias:  connAlias,
-			ClosedAtNs: closedAtNs,
-		},
-	}))
-}
-
-func (s *SinkIngest) EmitStreamUpsert(stream *ingestpb.StreamUpsert) {
-	s.offer(s.nextEnvelope(&ingestpb.Envelope_StreamUpsert{
-		StreamUpsert: stream,
-	}))
-}
-
-func (s *SinkIngest) EmitStreamClosed(streamAlias uint64, closedAtNs int64, reason ingestpb.CloseReason) {
-	s.offer(s.nextEnvelope(&ingestpb.Envelope_StreamClosed{
-		StreamClosed: &ingestpb.StreamClosed{
-			StreamAlias: streamAlias,
-			ClosedAtNs:  closedAtNs,
-			Reason:      reason,
-		},
-	}))
-}
-
-func (s *SinkIngest) EmitStreamChunk(streamAlias uint64, dir Direction, data []byte) {
-	cp := make([]byte, len(data))
-	copy(cp, data)
-	s.offer(s.nextEnvelope(&ingestpb.Envelope_StreamChunk{
-		StreamChunk: &ingestpb.StreamChunk{
-			StreamAlias: streamAlias,
-			Direction:   directionToIngest(dir),
-			Data:        cp,
-		},
-	}))
-}
-
-func (s *SinkIngest) nextEnvelope(payload any) *ingestpb.Envelope {
-	event := &ingestpb.Envelope{
-		Seq:          s.nextSeq.Add(1) - 1,
-		ObservedAtNs: time.Now().UnixNano(),
-	}
-	switch value := payload.(type) {
-	case *ingestpb.Envelope_SnapshotStart:
-		event.Payload = value
-	case *ingestpb.Envelope_SnapshotEnd:
-		event.Payload = value
-	case *ingestpb.Envelope_StringDef:
-		event.Payload = value
-	case *ingestpb.Envelope_PeerUpsert:
-		event.Payload = value
-	case *ingestpb.Envelope_ConnectionUpsert:
-		event.Payload = value
-	case *ingestpb.Envelope_ConnectionClosed:
-		event.Payload = value
-	case *ingestpb.Envelope_StreamUpsert:
-		event.Payload = value
-	case *ingestpb.Envelope_StreamClosed:
-		event.Payload = value
-	case *ingestpb.Envelope_StreamChunk:
-		event.Payload = value
-	default:
-		panic("unsupported ingest envelope payload")
-	}
-	return event
-}
-
-func directionToIngest(d Direction) ingestpb.Direction {
-	switch d {
-	case DirectionIn:
-		return ingestpb.Direction_DIRECTION_IN
-	case DirectionOut:
-		return ingestpb.Direction_DIRECTION_OUT
-	default:
-		return ingestpb.Direction_DIRECTION_UNKNOWN
 	}
 }

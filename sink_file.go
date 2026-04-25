@@ -6,11 +6,13 @@ import (
 	"sync"
 	"time"
 
-	pb "github.com/ethp2p/xray/proto"
 	"google.golang.org/protobuf/proto"
+
+	ingestpb "github.com/ethp2p/xray/proto/ingest"
 )
 
-// SinkFile writes trace events to disk as length-delimited protobuf.
+// SinkFile writes envelopes to disk as length-delimited protobuf, prefixed with
+// a snapshot of the current state so the file can be replayed standalone.
 type SinkFile struct {
 	mu sync.Mutex
 
@@ -45,13 +47,7 @@ func NewSinkFile(path string, emitter *Emitter, opts ...SinkFileOption) (*SinkFi
 		done:    make(chan struct{}),
 	}
 
-	snap := emitter.Snapshot()
-	event := &pb.TraceEvent{
-		Seq:         0,
-		TimestampNs: time.Now().UnixNano(),
-		Event:       &pb.TraceEvent_Snapshot{Snapshot: snap},
-	}
-	if err := s.writeEvent(event); err != nil {
+	if err := s.writeSnapshotLocked(); err != nil {
 		file.Close()
 		return nil, err
 	}
@@ -64,8 +60,8 @@ func NewSinkFile(path string, emitter *Emitter, opts ...SinkFileOption) (*SinkFi
 	return s, nil
 }
 
-// Write sends an event to the sink.
-func (s *SinkFile) Write(event *pb.TraceEvent) bool {
+// Write delivers an envelope to the file.
+func (s *SinkFile) Write(env *ingestpb.Envelope) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -73,11 +69,11 @@ func (s *SinkFile) Write(event *pb.TraceEvent) bool {
 		return false
 	}
 
-	return s.writeEvent(event) == nil
+	return s.writeEnvelopeLocked(env) == nil
 }
 
-func (s *SinkFile) writeEvent(event *pb.TraceEvent) error {
-	data, err := proto.Marshal(event)
+func (s *SinkFile) writeEnvelopeLocked(env *ingestpb.Envelope) error {
+	data, err := proto.Marshal(env)
 	if err != nil {
 		return err
 	}
@@ -90,6 +86,17 @@ func (s *SinkFile) writeEvent(event *pb.TraceEvent) error {
 
 	_, err = s.file.Write(data)
 	return err
+}
+
+func (s *SinkFile) writeSnapshotLocked() error {
+	snap := s.emitter.Snapshot()
+	envs := snapshotEnvelopes(snap)
+	for _, env := range envs {
+		if err := s.writeEnvelopeLocked(env); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Close stops the sink and closes the underlying file.
@@ -118,14 +125,45 @@ func (s *SinkFile) snapshotLoop() {
 		case <-s.snapshotTicker.C:
 			s.mu.Lock()
 			if !s.closed {
-				snap := s.emitter.Snapshot()
-				event := &pb.TraceEvent{
-					TimestampNs: time.Now().UnixNano(),
-					Event:       &pb.TraceEvent_Snapshot{Snapshot: snap},
-				}
-				s.writeEvent(event)
+				_ = s.writeSnapshotLocked()
 			}
 			s.mu.Unlock()
 		}
 	}
+}
+
+// snapshotEnvelopes converts a Snapshot into a sequence of envelopes wrapped
+// between SnapshotStart and SnapshotEnd markers. Used by both SinkFile and
+// SinkIngest to bring a fresh consumer up to date.
+func snapshotEnvelopes(snap Snapshot) []*ingestpb.Envelope {
+	envs := make([]*ingestpb.Envelope, 0, 2+len(snap.Strings)+len(snap.Peers)+len(snap.Connections)+len(snap.Streams))
+	envs = append(envs, &ingestpb.Envelope{
+		Payload: &ingestpb.Envelope_SnapshotStart{SnapshotStart: &ingestpb.SnapshotStart{}},
+	})
+	for id, value := range snap.Strings {
+		envs = append(envs, &ingestpb.Envelope{
+			Payload: &ingestpb.Envelope_StringDef{
+				StringDef: &ingestpb.StringDef{Id: uint32(id), Value: value},
+			},
+		})
+	}
+	for _, p := range snap.Peers {
+		envs = append(envs, &ingestpb.Envelope{
+			Payload: &ingestpb.Envelope_PeerUpsert{PeerUpsert: p},
+		})
+	}
+	for _, c := range snap.Connections {
+		envs = append(envs, &ingestpb.Envelope{
+			Payload: &ingestpb.Envelope_ConnectionUpsert{ConnectionUpsert: c},
+		})
+	}
+	for _, st := range snap.Streams {
+		envs = append(envs, &ingestpb.Envelope{
+			Payload: &ingestpb.Envelope_StreamUpsert{StreamUpsert: st},
+		})
+	}
+	envs = append(envs, &ingestpb.Envelope{
+		Payload: &ingestpb.Envelope_SnapshotEnd{SnapshotEnd: &ingestpb.SnapshotEnd{}},
+	})
+	return envs
 }

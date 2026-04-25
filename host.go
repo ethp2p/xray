@@ -11,7 +11,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 	ma "github.com/multiformats/go-multiaddr"
 
-	pb "github.com/ethp2p/xray/proto"
+	ingestpb "github.com/ethp2p/xray/proto/ingest"
 )
 
 // Host wraps a libp2p host to provide instrumentation.
@@ -85,8 +85,8 @@ func (h *Host) Close() error {
 	return h.Host.Close()
 }
 
-// Wrap creates an instrumented host that records traffic and connection events.
-func Wrap(h host.Host, opts ...Option) (*Host, error) {
+// Wiretap creates an instrumented host that records traffic and connection events.
+func Wiretap(h host.Host, opts ...Option) (*Host, error) {
 	cfg := &config{
 		ringBufferSize: DefaultRingBufferSize,
 	}
@@ -129,16 +129,16 @@ func Wrap(h host.Host, opts ...Option) (*Host, error) {
 	}
 
 	wrappedNet := &wrappedNetwork{
-		Network:    h.Network(),
-		emitter:    emitter,
-		strings:    strings,
-		worker:     worker,
-		initDecode: initDecode,
-		peers:      make(map[peer.ID]*trackedPeer),
-		conns:      make(map[string]*wrappedConn),
-		connByID:   make(map[uint32]*wrappedConn),
-		connPBs:    make(map[uint32]*pb.ConnInfo),
-		streams:    make(map[uint32]*pb.StreamInfo),
+		Network:           h.Network(),
+		emitter:           emitter,
+		strings:           strings,
+		worker:            worker,
+		initDecode:        initDecode,
+		peers:             make(map[peer.ID]*trackedPeer),
+		conns:             make(map[string]*wrappedConn),
+		connByID:          make(map[uint32]*wrappedConn),
+		connectionUpserts: make(map[uint32]*ingestpb.ConnectionUpsert),
+		streamUpserts:     make(map[uint32]*ingestpb.StreamUpsert),
 	}
 	emitter.net = wrappedNet
 
@@ -164,8 +164,7 @@ func Wrap(h host.Host, opts ...Option) (*Host, error) {
 	if cfg.ingestAddr != "" {
 		ingestSink := NewSinkIngest(cfg.ingestAddr, emitter, cfg.clientName, []byte(h.ID()), cfg.waitForAttach)
 		instrumentedHost.ingestSink = ingestSink
-		emitter.ingestSink = ingestSink
-		wrappedNet.ingestSink = ingestSink
+		emitter.AddSink(ingestSink)
 	}
 
 	h.Network().Notify(&notifiee{
@@ -187,6 +186,9 @@ func Wrap(h host.Host, opts ...Option) (*Host, error) {
 type notifiee struct {
 	emitter *Emitter
 	net     *wrappedNetwork
+
+	mu       sync.Mutex
+	openedAt map[uint32]int64
 }
 
 var _ network.Notifiee = (*notifiee)(nil)
@@ -197,20 +199,27 @@ func (n *notifiee) ListenClose(network.Network, ma.Multiaddr) {}
 func (n *notifiee) Connected(_ network.Network, conn network.Conn) {
 	openedAt := time.Now().UnixNano()
 	connID := n.emitter.NextConnID()
-	info, transportID, securityID, muxerID := n.net.connInfoFromConn(conn, connID, openedAt)
-	wc, created := n.net.addConn(conn, connID, openedAt, info, conn.LocalMultiaddr().String(), transportID, securityID, muxerID)
+	wc, upsert, created := n.net.connectionUpsertFor(conn, connID, openedAt)
 	if !created {
 		return
 	}
-	n.emitter.Emit(&pb.TraceEvent{
-		Event: &pb.TraceEvent_ConnOpened{
-			ConnOpened: &pb.ConnOpened{Info: info},
+	n.mu.Lock()
+	if n.openedAt == nil {
+		n.openedAt = make(map[uint32]int64)
+	}
+	n.openedAt[wc.connID] = openedAt
+	n.mu.Unlock()
+
+	n.emitter.Emit(&ingestpb.Envelope{
+		Payload: &ingestpb.Envelope_PeerUpsert{
+			PeerUpsert: n.net.peerUpsertFor(wc.peerAlias, conn.RemotePeer()),
 		},
 	})
-	if n.net.ingestSink != nil {
-		n.net.ingestSink.EmitPeerUpsert(wc.peerAlias, []byte(conn.RemotePeer()))
-		n.net.ingestSink.EmitConnectionUpsert(buildIngestConnectionUpsert(wc, info))
-	}
+	n.emitter.Emit(&ingestpb.Envelope{
+		Payload: &ingestpb.Envelope_ConnectionUpsert{
+			ConnectionUpsert: upsert,
+		},
+	})
 }
 
 func (n *notifiee) Disconnected(_ network.Network, conn network.Conn) {
@@ -218,16 +227,16 @@ func (n *notifiee) Disconnected(_ network.Network, conn network.Conn) {
 	if wc == nil {
 		return
 	}
-	durationNs := time.Now().UnixNano() - wc.openedAtNs
-	n.emitter.Emit(&pb.TraceEvent{
-		Event: &pb.TraceEvent_ConnClosed{
-			ConnClosed: &pb.ConnClosed{
-				ConnId:     wc.connID,
-				DurationNs: durationNs,
+	closedAt := time.Now().UnixNano()
+	n.emitter.Emit(&ingestpb.Envelope{
+		Payload: &ingestpb.Envelope_ConnectionClosed{
+			ConnectionClosed: &ingestpb.ConnectionClosed{
+				ConnAlias:  uint64(wc.connID),
+				ClosedAtNs: closedAt,
 			},
 		},
 	})
-	if n.net.ingestSink != nil {
-		n.net.ingestSink.EmitConnectionClosed(uint64(wc.connID), time.Now().UnixNano())
-	}
+	n.mu.Lock()
+	delete(n.openedAt, wc.connID)
+	n.mu.Unlock()
 }

@@ -1,12 +1,12 @@
 package xray
 
-import pb "github.com/ethp2p/xray/proto"
+import ingestpb "github.com/ethp2p/xray/proto/ingest"
 
-// Sink receives trace events from the collector.
+// Sink receives envelopes from the emitter.
 type Sink interface {
-	// Write sends an event to the sink.
-	// Returns false if sink cannot accept (backpressure).
-	Write(event *pb.TraceEvent) bool
+	// Write delivers an envelope to the sink.
+	// Returns false if the sink cannot accept (backpressure).
+	Write(env *ingestpb.Envelope) bool
 
 	// Close shuts down the sink.
 	Close() error

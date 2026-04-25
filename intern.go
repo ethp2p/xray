@@ -3,7 +3,7 @@ package xray
 import (
 	"sync"
 
-	pb "github.com/ethp2p/xray/proto"
+	ingestpb "github.com/ethp2p/xray/proto/ingest"
 )
 
 // stringInterner assigns compact sequential IDs to strings for wire efficiency.
@@ -23,9 +23,8 @@ func newStringInterner(emitter *Emitter) *stringInterner {
 	}
 }
 
-// Intern returns the ID for a string, emitting a StringDef event if new.
+// Intern returns the ID for a string, emitting a StringDef envelope if new.
 func (si *stringInterner) Intern(s string) uint32 {
-	// Fast path: already interned.
 	si.mu.RLock()
 	if id, ok := si.stringIDs[s]; ok {
 		si.mu.RUnlock()
@@ -33,7 +32,6 @@ func (si *stringInterner) Intern(s string) uint32 {
 	}
 	si.mu.RUnlock()
 
-	// Slow path: new string.
 	si.mu.Lock()
 	if id, ok := si.stringIDs[s]; ok {
 		si.mu.Unlock()
@@ -44,19 +42,15 @@ func (si *stringInterner) Intern(s string) uint32 {
 	si.stringIDs[s] = id
 	si.mu.Unlock()
 
-	si.emitter.Emit(&pb.TraceEvent{
-		Event: &pb.TraceEvent_StringDef{
-			StringDef: &pb.StringDef{Id: id, Value: s},
+	si.emitter.Emit(&ingestpb.Envelope{
+		Payload: &ingestpb.Envelope_StringDef{
+			StringDef: &ingestpb.StringDef{Id: id, Value: s},
 		},
 	})
-	if si.emitter.ingestSink != nil {
-		si.emitter.ingestSink.EmitStringDef(id, s)
-	}
 	return id
 }
 
-// snapshot returns a copy of all interned strings. Must be called externally
-// synchronized if consistency with other state is needed.
+// snapshot returns a copy of all interned strings.
 func (si *stringInterner) snapshot() []string {
 	si.mu.RLock()
 	defer si.mu.RUnlock()

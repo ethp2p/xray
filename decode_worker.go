@@ -41,12 +41,10 @@ func newDecodeWorker() *decodeWorker {
 func (w *decodeWorker) process(chunk decodeChunk) {
 	s := chunk.stream
 	if s.failed {
-		s.emitter.EmitTraffic(s.streamID, chunk.dir, len(chunk.data), nil)
 		return
 	}
 
 	emit := func(wireBytes int, tags []Tag, parsed any) {
-		s.emitter.EmitTraffic(s.streamID, chunk.dir, wireBytes, tags)
 		msg := DecodedMessage{
 			StreamID:  s.streamID,
 			ConnID:    s.wconn.connID,
@@ -69,9 +67,6 @@ func (w *decodeWorker) process(chunk decodeChunk) {
 		err = s.decoder.ObserveWrite(chunk.data, emit)
 	}
 	if err != nil {
-		// Emit raw bytes for the failed chunk — the decoder returned before
-		// calling emit, so these bytes would otherwise go unaccounted.
-		s.emitter.EmitTraffic(s.streamID, chunk.dir, len(chunk.data), nil)
 		s.decoder.Reset()
 		s.failed = true
 	}

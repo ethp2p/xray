@@ -12,27 +12,27 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
-	pb "github.com/ethp2p/xray/proto"
+	ingestpb "github.com/ethp2p/xray/proto/ingest"
 )
 
-func readTraceFile(t *testing.T, path string) []*pb.TraceEvent {
+func readTraceFile(t *testing.T, path string) []*ingestpb.Envelope {
 	t.Helper()
 	f, err := os.Open(path)
 	require.NoError(t, err)
 	defer f.Close()
 
-	var events []*pb.TraceEvent
+	var envs []*ingestpb.Envelope
 	for {
-		var e pb.TraceEvent
+		var e ingestpb.Envelope
 		if err := readDelimited(f, &e, 1<<20); err != nil {
 			if err == io.EOF {
 				break
 			}
 			break
 		}
-		events = append(events, &e)
+		envs = append(envs, &e)
 	}
-	return events
+	return envs
 }
 
 func readDelimited(r io.Reader, msg proto.Message, maxSize int) error {
@@ -65,42 +65,50 @@ func readDelimited(r io.Reader, msg proto.Message, maxSize int) error {
 	return proto.Unmarshal(data, msg)
 }
 
-func assertHasEventType(t *testing.T, events []*pb.TraceEvent, eventType string) {
+func assertHasPayloadType(t *testing.T, envs []*ingestpb.Envelope, kind string) {
 	t.Helper()
-	assert.Greater(t, countEventType(events, eventType), 0,
-		"should have %s events", eventType)
+	assert.Greater(t, countPayloadType(envs, kind), 0,
+		"should have %s envelopes", kind)
 }
 
-func countEventType(events []*pb.TraceEvent, eventType string) int {
+func countPayloadType(envs []*ingestpb.Envelope, kind string) int {
 	count := 0
-	for _, e := range events {
-		switch eventType {
-		case "snapshot":
-			if e.GetSnapshot() != nil {
+	for _, e := range envs {
+		switch kind {
+		case "snapshot_start":
+			if e.GetSnapshotStart() != nil {
+				count++
+			}
+		case "snapshot_end":
+			if e.GetSnapshotEnd() != nil {
 				count++
 			}
 		case "string_def":
 			if e.GetStringDef() != nil {
 				count++
 			}
-		case "conn_opened":
-			if e.GetConnOpened() != nil {
+		case "peer_upsert":
+			if e.GetPeerUpsert() != nil {
 				count++
 			}
-		case "conn_closed":
-			if e.GetConnClosed() != nil {
+		case "connection_upsert":
+			if e.GetConnectionUpsert() != nil {
 				count++
 			}
-		case "stream_opened":
-			if e.GetStreamOpened() != nil {
+		case "connection_closed":
+			if e.GetConnectionClosed() != nil {
+				count++
+			}
+		case "stream_upsert":
+			if e.GetStreamUpsert() != nil {
 				count++
 			}
 		case "stream_closed":
 			if e.GetStreamClosed() != nil {
 				count++
 			}
-		case "traffic":
-			if e.GetTraffic() != nil {
+		case "stream_chunk":
+			if e.GetStreamChunk() != nil {
 				count++
 			}
 		}
@@ -108,52 +116,52 @@ func countEventType(events []*pb.TraceEvent, eventType string) int {
 	return count
 }
 
-func sumTraffic(events []*pb.TraceEvent) (totalIn, totalOut uint64) {
-	for _, e := range events {
-		if bw := e.GetTraffic(); bw != nil {
-			if bw.Direction == pb.Direction_DIRECTION_IN {
-				totalIn += uint64(bw.Bytes)
+func sumStreamChunks(envs []*ingestpb.Envelope) (totalIn, totalOut uint64) {
+	for _, e := range envs {
+		if c := e.GetStreamChunk(); c != nil {
+			if c.Direction == ingestpb.Direction_DIRECTION_IN {
+				totalIn += uint64(len(c.Data))
 			} else {
-				totalOut += uint64(bw.Bytes)
+				totalOut += uint64(len(c.Data))
 			}
 		}
 	}
 	return
 }
 
-func assertMonotonicSeq(t *testing.T, events []*pb.TraceEvent) {
+func assertMonotonicSeq(t *testing.T, envs []*ingestpb.Envelope) {
 	t.Helper()
-	var lastNonZeroSeq uint64
-	for _, e := range events {
+	var lastSeq uint64
+	for _, e := range envs {
 		if e.Seq > 0 {
-			assert.GreaterOrEqual(t, e.Seq, lastNonZeroSeq, "sequence should be monotonic: got %d after %d", e.Seq, lastNonZeroSeq)
-			lastNonZeroSeq = e.Seq
+			assert.GreaterOrEqual(t, e.Seq, lastSeq, "sequence should be monotonic: got %d after %d", e.Seq, lastSeq)
+			lastSeq = e.Seq
 		}
 	}
 }
 
-func assertTimestampsInRange(t *testing.T, events []*pb.TraceEvent, start, end time.Time) {
+func assertTimestampsInRange(t *testing.T, envs []*ingestpb.Envelope, start, end time.Time) {
 	t.Helper()
-	for _, e := range events {
-		ts := time.Unix(0, e.TimestampNs)
+	for _, e := range envs {
+		ts := time.Unix(0, e.ObservedAtNs)
 		assert.True(t, ts.After(start) && ts.Before(end),
 			"timestamp %v should be between %v and %v", ts, start, end)
 	}
 }
 
-func extractStreamIDs(events []*pb.TraceEvent) []uint32 {
-	var ids []uint32
-	for _, e := range events {
-		if so := e.GetStreamOpened(); so != nil {
-			ids = append(ids, so.Info.StreamId)
+func extractStreamAliases(envs []*ingestpb.Envelope) []uint64 {
+	var ids []uint64
+	for _, e := range envs {
+		if so := e.GetStreamUpsert(); so != nil {
+			ids = append(ids, so.StreamAlias)
 		}
 	}
 	return ids
 }
 
-func unique(ids []uint32) []uint32 {
-	seen := make(map[uint32]bool)
-	var result []uint32
+func unique[T comparable](ids []T) []T {
+	seen := make(map[T]bool)
+	var result []T
 	for _, id := range ids {
 		if !seen[id] {
 			seen[id] = true
@@ -163,7 +171,7 @@ func unique(ids []uint32) []uint32 {
 	return result
 }
 
-func allEqual(ids []uint32) bool {
+func allEqual[T comparable](ids []T) bool {
 	if len(ids) == 0 {
 		return true
 	}
