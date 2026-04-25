@@ -23,7 +23,7 @@ Wiretap wraps any `go-libp2p` host to capture stream-level traffic without modif
                           │ (ClientHello -> ServerHello -> Envelopes)
                           v
 ┌─────────────────────────────────────────────────────────────┐
-│                   Backend (cmd/wiretap)                       │
+│                   Backend (cmd/xray)                          │
 │                                                               │
 │  ┌──────────┐  ┌───────────┐  ┌──────────┐  ┌────────────┐ │
 │  │ Ingest   │->│ Processor │->│ Storage  │  │ HTTP/WS    │ │
@@ -43,7 +43,7 @@ Wiretap wraps any `go-libp2p` host to capture stream-level traffic without modif
 
 The **probe** is a library that clients embed. It wraps the libp2p `Host`, intercepts every `Read`/`Write` on every stream, and forwards raw byte chunks over a lightweight ingest protocol to the backend. The probe has no Ethereum-specific logic; it sends opaque bytes.
 
-The **backend** is a standalone binary (`cmd/wiretap`). It accepts probe connections, reassembles gossipsub RPC frames, decodes SSZ payloads to extract slot numbers and block metadata, then aggregates traffic into 100ms time buckets per slot. It serves a REST + WebSocket API for the dashboard and persists finalized slots to disk.
+The **backend** is a standalone binary (`cmd/xray`). It accepts probe connections, reassembles gossipsub RPC frames, decodes SSZ payloads to extract slot numbers and block metadata, then aggregates traffic into 100ms time buckets per slot. It serves a REST + WebSocket API for the dashboard and persists finalized slots to disk.
 
 The **dashboard** is a Solid.js single-page app that connects to the backend over WebSocket for live slot updates and REST for historical data.
 
@@ -62,8 +62,8 @@ The backend listens on port 9100. Mount the probe's Unix socket directory as a v
 Start the backend:
 
 ```bash
-go build -o wiretap ./cmd/wiretap
-./wiretap --ingest=/tmp/wiretap.sock --listen=127.0.0.1:9100
+go build -o xray ./cmd/xray
+./xray --ingest=/tmp/xray.sock --listen=127.0.0.1:9100
 ```
 
 Start the dashboard dev server:
@@ -77,10 +77,10 @@ Open `http://localhost:5173`. Vite proxies API requests to the backend on `:9100
 ### Integrate with Prysm
 
 ```go
-import "github.com/ethp2p/wiretap/probe"
+import "github.com/ethp2p/xray/probe"
 
 ih, err := probe.Wrap(h,
-    probe.WithIngestAddr("/tmp/wiretap.sock"),
+    probe.WithIngestAddr("/tmp/xray.sock"),
     probe.WithClientName("prysm"),
     probe.WithWaitForAttach(),
 )
@@ -98,7 +98,7 @@ backend/                Per-slot aggregation, REST/WS API, processor, storage
 wire/                   Ingest protocol codec (typed length-delimited framing)
 proto/                  Protobuf definitions and generated code
   ingest/               Ingest protocol messages (Envelope, ClientHello, etc.)
-cmd/wiretap/            Backend binary entrypoint
+cmd/xray/               Backend binary entrypoint
 itest/                  Integration tests (gossipsub decoding, introspector E2E)
 dashboard/              Solid.js web dashboard ("Ethereum Xray")
 docs/                   Specs and plans
@@ -109,14 +109,14 @@ docs/                   Specs and plans
 The probe wraps a `go-libp2p` host transparently:
 
 ```go
-import "github.com/ethp2p/wiretap/probe"
+import "github.com/ethp2p/xray/probe"
 
 host, _ := libp2p.New(...)
 ih, err := probe.Wrap(host,
-    probe.WithIngestAddr("/tmp/wiretap.sock"),
+    probe.WithIngestAddr("/tmp/xray.sock"),
     probe.WithClientName("my-client/v1.0"),
     probe.WithWaitForAttach(),                    // block until backend connects
-    probe.WithSinkFile("/var/log/wiretap.trace"), // optional local trace file
+    probe.WithSinkFile("/var/log/xray.trace"), // optional local trace file
     probe.WithDecoder(gossipsub.Decoder{}.Match, gossipsub.Decoder{}.New),
     probe.WithOnMessage(func(streamID uint32, protocol string) probe.OnMessage {
         return func(msg probe.DecodedMessage) {
@@ -131,13 +131,13 @@ defer ih.Close()
 
 ## Configuration
 
-Backend CLI flags (`cmd/wiretap`):
+Backend CLI flags (`cmd/xray`):
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--ingest` | `/tmp/wiretap.sock` | Ingest listener address (Unix path or host:port) |
+| `--ingest` | `/tmp/xray.sock` | Ingest listener address (Unix path or host:port) |
 | `--listen` | `127.0.0.1:9100` | HTTP listen address for REST/WS API |
-| `--data-dir` | `~/.wiretap/data` | Persistence directory for slot data |
+| `--data-dir` | `~/.xray/data` | Persistence directory for slot data |
 | `--retention-days` | `30` | Slot retention period in days |
 | `--genesis-unix` | `1606824023` | Beacon chain genesis Unix timestamp |
 | `--seconds-per-slot` | `12` | Beacon chain seconds per slot |

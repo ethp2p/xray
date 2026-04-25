@@ -1,7 +1,7 @@
 syntax = "proto3";
 package wiretap.v1;
 
-option go_package = "github.com/ethp2p/wiretap/proto;wiretappb";
+option go_package = "github.com/ethp2p/xray/proto;wiretappb";
 
 // Top-level event wrapper
 message TraceEvent {

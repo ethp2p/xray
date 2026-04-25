@@ -4,8 +4,8 @@ import (
 	"encoding/binary"
 	"testing"
 
-	"github.com/ethp2p/wiretap/probe"
-	gossipsub "github.com/ethp2p/wiretap/gossipsub"
+	"github.com/ethp2p/xray/probe"
+	gossipsub "github.com/ethp2p/xray/gossipsub"
 	"github.com/gogo/protobuf/proto"
 	pubsubpb "github.com/libp2p/go-libp2p-pubsub/pb"
 )

@@ -1,18 +1,17 @@
 services:
-  wiretap:
+  xray:
     build: .
     user: "${UID:-1000}:${GID:-1000}"
     ports:
       - "9100:9100"
     volumes:
-      - ${WIRETAP_DATA_DIR:-~/.wiretap/data}:/data
-      - ${WIRETAP_SOCK_DIR:-/tmp}:/run/wiretap
+      - ${XRAY_DATA_DIR:-~/.xray/data}:/data
+      - ${XRAY_SOCK_DIR:-/tmp}:/run/xray
     command:
-      - --ingest=/run/wiretap/wiretap.sock
+      - --ingest=/run/xray/xray.sock
       - --listen=0.0.0.0:9100
       - --data-dir=/data
       - --static-dir=/srv/dashboard
       - --genesis-unix=1606824023
       - --retention-days=30
     restart: unless-stopped
-

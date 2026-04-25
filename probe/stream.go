@@ -9,8 +9,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 
-	pb "github.com/ethp2p/wiretap/proto"
-	ingestpb "github.com/ethp2p/wiretap/proto/ingest"
+	pb "github.com/ethp2p/xray/proto"
+	ingestpb "github.com/ethp2p/xray/proto/ingest"
 )
 
 // wrappedConn tracks the instrumentation connID on a connection.

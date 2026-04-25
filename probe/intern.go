@@ -3,7 +3,7 @@ package probe
 import (
 	"sync"
 
-	pb "github.com/ethp2p/wiretap/proto"
+	pb "github.com/ethp2p/xray/proto"
 )
 
 // StringInterner assigns compact sequential IDs to strings for wire efficiency.

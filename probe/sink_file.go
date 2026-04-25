@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	pb "github.com/ethp2p/wiretap/proto"
+	pb "github.com/ethp2p/xray/proto"
 	"google.golang.org/protobuf/proto"
 )
 

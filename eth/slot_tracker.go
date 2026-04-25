@@ -6,7 +6,7 @@ import (
 
 	pubsubpb "github.com/libp2p/go-libp2p-pubsub/pb"
 
-	"github.com/ethp2p/wiretap/probe"
+	"github.com/ethp2p/xray/probe"
 )
 
 // SlotTracker returns a message handler factory that tracks slot transitions

@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ethp2p/wiretap/eth"
-	ingestpb "github.com/ethp2p/wiretap/proto/ingest"
+	"github.com/ethp2p/xray/eth"
+	ingestpb "github.com/ethp2p/xray/proto/ingest"
 )
 
 const slotBucketWidthMs = 100

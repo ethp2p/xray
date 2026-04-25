@@ -5,7 +5,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	pb "github.com/ethp2p/wiretap/proto"
+	pb "github.com/ethp2p/xray/proto"
 )
 
 // DefaultRingBufferSize is the default number of events to keep in the ring buffer.

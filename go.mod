@@ -1,4 +1,4 @@
-module github.com/ethp2p/wiretap
+module github.com/ethp2p/xray
 
 go 1.25.1
 

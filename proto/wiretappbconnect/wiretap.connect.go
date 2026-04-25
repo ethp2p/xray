@@ -8,7 +8,7 @@ import (
 	connect "connectrpc.com/connect"
 	context "context"
 	errors "errors"
-	proto "github.com/ethp2p/wiretap/proto"
+	proto "github.com/ethp2p/xray/proto"
 	http "net/http"
 	strings "strings"
 )

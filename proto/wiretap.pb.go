@@ -1109,7 +1109,7 @@ const file_proto_wiretap_proto_rawDesc = "" +
 	"\fDIRECTION_IN\x10\x01\x12\x11\n" +
 	"\rDIRECTION_OUT\x10\x022T\n" +
 	"\x0eWiretapService\x12B\n" +
-	"\fStreamEvents\x12\x15.wiretap.v1.Handshake\x1a\x19.wiretap.v1.ServerMessage0\x01B+Z)github.com/ethp2p/wiretap/proto;wiretappbb\x06proto3"
+	"\fStreamEvents\x12\x15.wiretap.v1.Handshake\x1a\x19.wiretap.v1.ServerMessage0\x01B(Z&github.com/ethp2p/xray/proto;wiretappbb\x06proto3"
 
 var (
 	file_proto_wiretap_proto_rawDescOnce sync.Once

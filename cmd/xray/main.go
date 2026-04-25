@@ -10,13 +10,13 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/ethp2p/wiretap/eth"
-	"github.com/ethp2p/wiretap/backend"
+	"github.com/ethp2p/xray/eth"
+	"github.com/ethp2p/xray/backend"
 )
 
 func main() {
 	var (
-		ingestAddr     = flag.String("ingest", "/tmp/wiretap-backend.sock", "Address for the ingest listener (Unix path or host:port)")
+		ingestAddr     = flag.String("ingest", "/tmp/xray.sock", "Address for the ingest listener (Unix path or host:port)")
 		listenAddr     = flag.String("listen", "127.0.0.1:9100", "HTTP listen address for the dashboard API")
 		genesisUnix    = flag.Int64("genesis-unix", 1606824023, "Beacon chain genesis unix timestamp")
 		secondsPerSlot = flag.Uint64("seconds-per-slot", 12, "Beacon chain seconds per slot")
@@ -110,5 +110,5 @@ func main() {
 
 func defaultDataDir() string {
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".wiretap", "data")
+	return filepath.Join(home, ".xray", "data")
 }

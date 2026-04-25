@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"strings"
 
-	gossipsub "github.com/ethp2p/wiretap/gossipsub"
+	gossipsub "github.com/ethp2p/xray/gossipsub"
 	pubsubpb "github.com/libp2p/go-libp2p-pubsub/pb"
 )
 

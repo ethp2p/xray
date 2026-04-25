@@ -1080,7 +1080,7 @@ const file_proto_ingest_ingest_proto_rawDesc = "" +
 	"\x14CLOSE_REASON_UNKNOWN\x10\x00\x12\x16\n" +
 	"\x12CLOSE_REASON_CLOSE\x10\x01\x12\x16\n" +
 	"\x12CLOSE_REASON_RESET\x10\x02\x12\x1c\n" +
-	"\x18CLOSE_REASON_CONN_CLOSED\x10\x03B1Z/github.com/ethp2p/wiretap/proto/ingest;ingestpbb\x06proto3"
+	"\x18CLOSE_REASON_CONN_CLOSED\x10\x03B.Z,github.com/ethp2p/xray/proto/ingest;ingestpbb\x06proto3"
 
 var (
 	file_proto_ingest_ingest_proto_rawDescOnce sync.Once

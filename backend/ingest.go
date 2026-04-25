@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	ingestpb "github.com/ethp2p/wiretap/proto/ingest"
-	"github.com/ethp2p/wiretap/wire"
+	ingestpb "github.com/ethp2p/xray/proto/ingest"
+	"github.com/ethp2p/xray/wire"
 )
 
 // IngestListener accepts inbound connections from probes, performs a

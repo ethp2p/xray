@@ -7,7 +7,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 
-	"github.com/ethp2p/wiretap/probe"
+	"github.com/ethp2p/xray/probe"
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 )

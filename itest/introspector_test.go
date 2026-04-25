@@ -25,9 +25,9 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ethp2p/wiretap/probe"
-	"github.com/ethp2p/wiretap/eth"
-	"github.com/ethp2p/wiretap/backend"
+	"github.com/ethp2p/xray/probe"
+	"github.com/ethp2p/xray/eth"
+	"github.com/ethp2p/xray/backend"
 )
 
 type liveMessage struct {

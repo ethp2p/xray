@@ -11,7 +11,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 	ma "github.com/multiformats/go-multiaddr"
 
-	pb "github.com/ethp2p/wiretap/proto"
+	pb "github.com/ethp2p/xray/proto"
 )
 
 // Host wraps a libp2p host to provide instrumentation.

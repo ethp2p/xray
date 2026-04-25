@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	ingestpb "github.com/ethp2p/wiretap/proto/ingest"
+	ingestpb "github.com/ethp2p/xray/proto/ingest"
 	"google.golang.org/protobuf/proto"
 )
 

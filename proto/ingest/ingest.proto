@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package wiretap.ingest.v1;
 
-option go_package = "github.com/ethp2p/wiretap/proto/ingest;ingestpb";
+option go_package = "github.com/ethp2p/xray/proto/ingest;ingestpb";
 
 message Envelope {
   uint64 seq = 1;

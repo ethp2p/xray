@@ -1,6 +1,6 @@
 package probe
 
-import pb "github.com/ethp2p/wiretap/proto"
+import pb "github.com/ethp2p/xray/proto"
 
 // Sink receives trace events from the collector.
 type Sink interface {
