@@ -1,4 +1,4 @@
-package backend
+package ingest
 
 import (
 	"context"
@@ -8,6 +8,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ethp2p/xray/internal/processor"
+	"github.com/ethp2p/xray/internal/sources"
+	"github.com/ethp2p/xray/internal/storage"
 	wiretappb "github.com/ethp2p/xray/proto/wiretap"
 	"github.com/ethp2p/xray/proto/wiretap/wire"
 )
@@ -18,9 +21,9 @@ import (
 // reconnecting probe preempts the previous connection.
 type IngestListener struct {
 	ctx       context.Context
-	processor *Processor
-	registry  *SourceRegistry
-	storage   *Storage
+	processor *processor.Processor
+	registry  *sources.SourceRegistry
+	storage   *storage.Storage
 	mu        sync.Mutex
 	sessions  map[string]*activeSession
 }
@@ -30,11 +33,11 @@ type activeSession struct {
 	conn   net.Conn
 }
 
-func NewIngestListener(processor *Processor, registry *SourceRegistry, storage *Storage) *IngestListener {
+func NewIngestListener(p *processor.Processor, registry *sources.SourceRegistry, store *storage.Storage) *IngestListener {
 	return &IngestListener{
-		processor: processor,
+		processor: p,
 		registry:  registry,
-		storage:   storage,
+		storage:   store,
 		sessions:  make(map[string]*activeSession),
 	}
 }
@@ -86,7 +89,7 @@ func (l *IngestListener) handleConnection(conn net.Conn) {
 		return
 	}
 
-	sourceID := DeriveSourceID(hello.PeerId)
+	sourceID := sources.DeriveSourceID(hello.PeerId)
 
 	l.mu.Lock()
 	if old, ok := l.sessions[sourceID]; ok {
@@ -116,7 +119,7 @@ func (l *IngestListener) handleConnection(conn net.Conn) {
 		return
 	}
 
-	info := SourceInfo{
+	info := sources.SourceInfo{
 		SourceID:    sourceID,
 		PeerID:      hello.PeerId,
 		ClientName:  hello.ClientName,

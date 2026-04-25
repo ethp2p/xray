@@ -10,8 +10,12 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/ethp2p/xray/internal/backend"
 	"github.com/ethp2p/xray/internal/eth"
+	"github.com/ethp2p/xray/internal/ingest"
+	"github.com/ethp2p/xray/internal/processor"
+	"github.com/ethp2p/xray/internal/server"
+	"github.com/ethp2p/xray/internal/sources"
+	"github.com/ethp2p/xray/internal/storage"
 )
 
 func main() {
@@ -30,29 +34,29 @@ func main() {
 	defer stop()
 
 	clock := eth.NewSlotClock(time.Unix(*genesisUnix, 0), *secondsPerSlot)
-	processor := backend.NewProcessor(clock)
-	registry := backend.NewSourceRegistry()
+	proc := processor.NewProcessor(clock)
+	registry := sources.NewSourceRegistry()
 
-	storage, err := backend.NewStorage(*dataDir)
+	store, err := storage.NewStorage(*dataDir)
 	if err != nil {
 		log.Fatalf("create storage: %v", err)
 	}
 
-	metas, err := storage.LoadSourceMetas()
+	metas, err := store.LoadSourceMetas()
 	if err != nil {
 		log.Printf("load source metas: %v", err)
 	}
 	for _, meta := range metas {
 		registry.Register(meta)
-		if err := storage.LoadSummaryIndex(meta.SourceID); err != nil {
+		if err := store.LoadSummaryIndex(meta.SourceID); err != nil {
 			log.Printf("load summary index for %s: %v", meta.SourceID, err)
 		}
 	}
 
-	finalizeCh := make(chan backend.FinalizedSlot, 64)
-	processor.SetOnFinalize(func(sourceID string, detail backend.SlotDetail) {
+	finalizeCh := make(chan processor.FinalizedSlot, 64)
+	proc.SetOnFinalize(func(sourceID string, detail processor.SlotDetail) {
 		select {
-		case finalizeCh <- backend.FinalizedSlot{SourceID: sourceID, Detail: detail}:
+		case finalizeCh <- processor.FinalizedSlot{SourceID: sourceID, Detail: detail}:
 		case <-ctx.Done():
 		}
 	})
@@ -63,7 +67,7 @@ func main() {
 			case <-ctx.Done():
 				return
 			case item := <-finalizeCh:
-				if err := storage.WriteSlot(item.SourceID, item.Detail); err != nil {
+				if err := store.WriteSlot(item.SourceID, item.Detail); err != nil {
 					log.Printf("persist slot %d: %v", item.Detail.Summary.Slot, err)
 				}
 			}
@@ -78,14 +82,14 @@ func main() {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				if err := storage.Prune(*retentionDays, 32, *secondsPerSlot, *genesisUnix); err != nil {
+				if err := store.Prune(*retentionDays, 32, *secondsPerSlot, *genesisUnix); err != nil {
 					log.Printf("retention prune: %v", err)
 				}
 			}
 		}
 	}()
 
-	ingestListener := backend.NewIngestListener(processor, registry, storage)
+	ingestListener := ingest.NewIngestListener(proc, registry, store)
 
 	go func() {
 		if err := ingestListener.ListenAndServe(ctx, *ingestAddr); err != nil && ctx.Err() == nil {
@@ -93,9 +97,9 @@ func main() {
 		}
 	}()
 
-	server := backend.NewServer(processor, registry, storage)
+	srv := server.NewServer(proc, registry, store)
 	if *staticDir != "" {
-		server.SetStaticDir(*staticDir)
+		srv.SetStaticDir(*staticDir)
 	}
 	listener, err := net.Listen("tcp", *listenAddr)
 	if err != nil {
@@ -103,7 +107,7 @@ func main() {
 	}
 
 	log.Printf("introspector listening on http://%s (ingest on %s)", listener.Addr().String(), *ingestAddr)
-	if err := server.Serve(listener); err != nil {
+	if err := srv.Serve(listener); err != nil {
 		log.Fatalf("server failed: %v", err)
 	}
 }

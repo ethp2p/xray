@@ -26,15 +26,19 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ethp2p/xray"
-	"github.com/ethp2p/xray/internal/backend"
+	"github.com/ethp2p/xray/api"
 	"github.com/ethp2p/xray/internal/eth"
+	"github.com/ethp2p/xray/internal/ingest"
+	"github.com/ethp2p/xray/internal/processor"
+	"github.com/ethp2p/xray/internal/server"
+	"github.com/ethp2p/xray/internal/sources"
 )
 
 type liveMessage struct {
-	Type        string                `json:"type"`
-	Slot        *backend.SlotSummary  `json:"slot"`
-	Slots       []backend.SlotSummary `json:"slots"`
-	CurrentSlot uint64                `json:"current_slot"`
+	Type        string            `json:"type"`
+	Slot        *api.SlotSummary  `json:"slot"`
+	Slots       []api.SlotSummary `json:"slots"`
+	CurrentSlot uint64            `json:"current_slot"`
 }
 
 func TestIntrospectorUnixIngestHTTPAndWS(t *testing.T) {
@@ -477,9 +481,9 @@ func startIntrospectorFixture(t *testing.T, ctx context.Context) introspectorFix
 	})
 
 	clock := eth.NewSlotClock(time.Unix(1606824023, 0), 12)
-	processor := backend.NewProcessor(clock)
-	registry := backend.NewSourceRegistry()
-	ingestListener := backend.NewIngestListener(processor, registry, nil)
+	processor := processor.NewProcessor(clock)
+	registry := sources.NewSourceRegistry()
+	ingestListener := ingest.NewIngestListener(processor, registry, nil)
 
 	ingestCtx, ingestCancel := context.WithCancel(ctx)
 	t.Cleanup(ingestCancel)
@@ -490,7 +494,7 @@ func startIntrospectorFixture(t *testing.T, ctx context.Context) introspectorFix
 	// Brief pause so the listener binds before the probe dials.
 	time.Sleep(50 * time.Millisecond)
 
-	server := backend.NewServer(processor, registry, nil)
+	server := server.NewServer(processor, registry, nil)
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	t.Cleanup(func() {
@@ -506,7 +510,7 @@ func startIntrospectorFixture(t *testing.T, ctx context.Context) introspectorFix
 	}
 }
 
-func fetchSlotSummaries(t *testing.T, baseURL string) []backend.SlotSummary {
+func fetchSlotSummaries(t *testing.T, baseURL string) []api.SlotSummary {
 	t.Helper()
 
 	resp, err := http.Get(baseURL + "/api/slots")
@@ -515,13 +519,13 @@ func fetchSlotSummaries(t *testing.T, baseURL string) []backend.SlotSummary {
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
 	var payload struct {
-		Slots []backend.SlotSummary `json:"slots"`
+		Slots []api.SlotSummary `json:"slots"`
 	}
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&payload))
 	return payload.Slots
 }
 
-func fetchSlotDetail(t *testing.T, baseURL string, slot uint64) (backend.SlotDetail, int) {
+func fetchSlotDetail(t *testing.T, baseURL string, slot uint64) (api.SlotDetail, int) {
 	t.Helper()
 
 	resp, err := http.Get(fmt.Sprintf("%s/api/slots/%d", baseURL, slot))
@@ -529,10 +533,10 @@ func fetchSlotDetail(t *testing.T, baseURL string, slot uint64) (backend.SlotDet
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return backend.SlotDetail{}, resp.StatusCode
+		return api.SlotDetail{}, resp.StatusCode
 	}
 
-	var detail backend.SlotDetail
+	var detail api.SlotDetail
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&detail))
 	return detail, resp.StatusCode
 }

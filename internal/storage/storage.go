@@ -1,4 +1,4 @@
-package backend
+package storage
 
 import (
 	"bufio"
@@ -11,6 +11,18 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ethp2p/xray/api"
+	"github.com/ethp2p/xray/internal/sources"
+)
+
+// Re-export public DTOs locally so the storage code reads naturally.
+type (
+	SlotSummary     = api.SlotSummary
+	SlotDetail      = api.SlotDetail
+	SlotBreakdown   = api.SlotBreakdown
+	SlotBucketPoint = api.SlotBucketPoint
+	SourceInfo      = sources.SourceInfo
 )
 
 type Storage struct {

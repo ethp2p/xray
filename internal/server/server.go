@@ -1,4 +1,4 @@
-package backend
+package server
 
 import (
 	"compress/gzip"
@@ -15,6 +15,18 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+
+	"github.com/ethp2p/xray/api"
+	"github.com/ethp2p/xray/internal/processor"
+	"github.com/ethp2p/xray/internal/sources"
+	"github.com/ethp2p/xray/internal/storage"
+)
+
+// Local aliases keep handler bodies readable.
+type (
+	SlotSummary = api.SlotSummary
+	SlotDetail  = api.SlotDetail
+	wsMessage   = api.WsMessage
 )
 
 type wsClient struct {
@@ -28,9 +40,9 @@ type pendingKey struct {
 }
 
 type Server struct {
-	processor *Processor
-	registry  *SourceRegistry
-	storage   *Storage
+	processor *processor.Processor
+	registry  *sources.SourceRegistry
+	storage   *storage.Storage
 	staticDir string
 
 	mu      sync.Mutex
@@ -41,16 +53,16 @@ type Server struct {
 	flushScheduled bool
 }
 
-func NewServer(processor *Processor, registry *SourceRegistry, storage *Storage) *Server {
+func NewServer(p *processor.Processor, registry *sources.SourceRegistry, store *storage.Storage) *Server {
 	s := &Server{
-		processor:      processor,
+		processor:      p,
 		registry:       registry,
-		storage:        storage,
+		storage:        store,
 		clients:        make(map[*websocket.Conn]*wsClient),
 		pendingUpdates: make(map[pendingKey]SlotSummary),
 		pendingCurrent: make(map[string]uint64),
 	}
-	processor.SetOnUpdate(s.broadcastUpdate)
+	p.SetOnUpdate(s.broadcastUpdate)
 	return s
 }
 
