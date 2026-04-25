@@ -11,7 +11,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 	ma "github.com/multiformats/go-multiaddr"
 
-	ingestpb "github.com/ethp2p/xray/proto/ingest"
+	wiretappb "github.com/ethp2p/xray/proto/wiretap"
 )
 
 // Host wraps a libp2p host to provide instrumentation.
@@ -137,8 +137,8 @@ func Wiretap(h host.Host, opts ...Option) (*Host, error) {
 		peers:             make(map[peer.ID]*trackedPeer),
 		conns:             make(map[string]*wrappedConn),
 		connByID:          make(map[uint32]*wrappedConn),
-		connectionUpserts: make(map[uint32]*ingestpb.ConnectionUpsert),
-		streamUpserts:     make(map[uint32]*ingestpb.StreamUpsert),
+		connectionUpserts: make(map[uint32]*wiretappb.ConnectionUpsert),
+		streamUpserts:     make(map[uint32]*wiretappb.StreamUpsert),
 	}
 	emitter.net = wrappedNet
 
@@ -210,13 +210,13 @@ func (n *notifiee) Connected(_ network.Network, conn network.Conn) {
 	n.openedAt[wc.connID] = openedAt
 	n.mu.Unlock()
 
-	n.emitter.Emit(&ingestpb.Envelope{
-		Payload: &ingestpb.Envelope_PeerUpsert{
+	n.emitter.Emit(&wiretappb.Envelope{
+		Payload: &wiretappb.Envelope_PeerUpsert{
 			PeerUpsert: n.net.peerUpsertFor(wc.peerAlias, conn.RemotePeer()),
 		},
 	})
-	n.emitter.Emit(&ingestpb.Envelope{
-		Payload: &ingestpb.Envelope_ConnectionUpsert{
+	n.emitter.Emit(&wiretappb.Envelope{
+		Payload: &wiretappb.Envelope_ConnectionUpsert{
 			ConnectionUpsert: upsert,
 		},
 	})
@@ -228,9 +228,9 @@ func (n *notifiee) Disconnected(_ network.Network, conn network.Conn) {
 		return
 	}
 	closedAt := time.Now().UnixNano()
-	n.emitter.Emit(&ingestpb.Envelope{
-		Payload: &ingestpb.Envelope_ConnectionClosed{
-			ConnectionClosed: &ingestpb.ConnectionClosed{
+	n.emitter.Emit(&wiretappb.Envelope{
+		Payload: &wiretappb.Envelope_ConnectionClosed{
+			ConnectionClosed: &wiretappb.ConnectionClosed{
 				ConnAlias:  uint64(wc.connID),
 				ClosedAtNs: closedAt,
 			},

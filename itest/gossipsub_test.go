@@ -16,7 +16,7 @@ import (
 
 	"github.com/ethp2p/xray"
 	"github.com/ethp2p/xray/gossipsub"
-	ingestpb "github.com/ethp2p/xray/proto/ingest"
+	wiretappb "github.com/ethp2p/xray/proto/wiretap"
 	pspb "github.com/libp2p/go-libp2p-pubsub/pb"
 )
 
@@ -433,7 +433,7 @@ func (tc *tagCollector) Topics() map[string]struct{} {
 
 type testSink struct {
 	mu      sync.Mutex
-	events  []*ingestpb.Envelope
+	events  []*wiretappb.Envelope
 	strings map[uint32]string
 }
 
@@ -443,7 +443,7 @@ func newTestSink() *testSink {
 	}
 }
 
-func (s *testSink) Write(event *ingestpb.Envelope) bool {
+func (s *testSink) Write(event *wiretappb.Envelope) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -457,10 +457,10 @@ func (s *testSink) Write(event *ingestpb.Envelope) bool {
 
 func (s *testSink) Close() error { return nil }
 
-func (s *testSink) Events() []*ingestpb.Envelope {
+func (s *testSink) Events() []*wiretappb.Envelope {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	result := make([]*ingestpb.Envelope, len(s.events))
+	result := make([]*wiretappb.Envelope, len(s.events))
 	copy(result, s.events)
 	return result
 }

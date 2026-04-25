@@ -2,9 +2,9 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        (unknown)
-// source: proto/ingest/ingest.proto
+// source: proto/wiretap/wiretap.proto
 
-package ingestpb
+package wiretappb
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -54,11 +54,11 @@ func (x Direction) String() string {
 }
 
 func (Direction) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_ingest_ingest_proto_enumTypes[0].Descriptor()
+	return file_proto_wiretap_wiretap_proto_enumTypes[0].Descriptor()
 }
 
 func (Direction) Type() protoreflect.EnumType {
-	return &file_proto_ingest_ingest_proto_enumTypes[0]
+	return &file_proto_wiretap_wiretap_proto_enumTypes[0]
 }
 
 func (x Direction) Number() protoreflect.EnumNumber {
@@ -67,7 +67,7 @@ func (x Direction) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use Direction.Descriptor instead.
 func (Direction) EnumDescriptor() ([]byte, []int) {
-	return file_proto_ingest_ingest_proto_rawDescGZIP(), []int{0}
+	return file_proto_wiretap_wiretap_proto_rawDescGZIP(), []int{0}
 }
 
 type CloseReason int32
@@ -106,11 +106,11 @@ func (x CloseReason) String() string {
 }
 
 func (CloseReason) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_ingest_ingest_proto_enumTypes[1].Descriptor()
+	return file_proto_wiretap_wiretap_proto_enumTypes[1].Descriptor()
 }
 
 func (CloseReason) Type() protoreflect.EnumType {
-	return &file_proto_ingest_ingest_proto_enumTypes[1]
+	return &file_proto_wiretap_wiretap_proto_enumTypes[1]
 }
 
 func (x CloseReason) Number() protoreflect.EnumNumber {
@@ -119,7 +119,7 @@ func (x CloseReason) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use CloseReason.Descriptor instead.
 func (CloseReason) EnumDescriptor() ([]byte, []int) {
-	return file_proto_ingest_ingest_proto_rawDescGZIP(), []int{1}
+	return file_proto_wiretap_wiretap_proto_rawDescGZIP(), []int{1}
 }
 
 type Envelope struct {
@@ -144,7 +144,7 @@ type Envelope struct {
 
 func (x *Envelope) Reset() {
 	*x = Envelope{}
-	mi := &file_proto_ingest_ingest_proto_msgTypes[0]
+	mi := &file_proto_wiretap_wiretap_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -156,7 +156,7 @@ func (x *Envelope) String() string {
 func (*Envelope) ProtoMessage() {}
 
 func (x *Envelope) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ingest_ingest_proto_msgTypes[0]
+	mi := &file_proto_wiretap_wiretap_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -169,7 +169,7 @@ func (x *Envelope) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Envelope.ProtoReflect.Descriptor instead.
 func (*Envelope) Descriptor() ([]byte, []int) {
-	return file_proto_ingest_ingest_proto_rawDescGZIP(), []int{0}
+	return file_proto_wiretap_wiretap_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *Envelope) GetSeq() uint64 {
@@ -345,7 +345,7 @@ type ClientHello struct {
 
 func (x *ClientHello) Reset() {
 	*x = ClientHello{}
-	mi := &file_proto_ingest_ingest_proto_msgTypes[1]
+	mi := &file_proto_wiretap_wiretap_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -357,7 +357,7 @@ func (x *ClientHello) String() string {
 func (*ClientHello) ProtoMessage() {}
 
 func (x *ClientHello) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ingest_ingest_proto_msgTypes[1]
+	mi := &file_proto_wiretap_wiretap_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -370,7 +370,7 @@ func (x *ClientHello) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientHello.ProtoReflect.Descriptor instead.
 func (*ClientHello) Descriptor() ([]byte, []int) {
-	return file_proto_ingest_ingest_proto_rawDescGZIP(), []int{1}
+	return file_proto_wiretap_wiretap_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *ClientHello) GetProtocolVersion() uint32 {
@@ -418,7 +418,7 @@ type ServerHello struct {
 
 func (x *ServerHello) Reset() {
 	*x = ServerHello{}
-	mi := &file_proto_ingest_ingest_proto_msgTypes[2]
+	mi := &file_proto_wiretap_wiretap_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -430,7 +430,7 @@ func (x *ServerHello) String() string {
 func (*ServerHello) ProtoMessage() {}
 
 func (x *ServerHello) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ingest_ingest_proto_msgTypes[2]
+	mi := &file_proto_wiretap_wiretap_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -443,7 +443,7 @@ func (x *ServerHello) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServerHello.ProtoReflect.Descriptor instead.
 func (*ServerHello) Descriptor() ([]byte, []int) {
-	return file_proto_ingest_ingest_proto_rawDescGZIP(), []int{2}
+	return file_proto_wiretap_wiretap_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ServerHello) GetProtocolVersion() uint32 {
@@ -468,7 +468,7 @@ type SnapshotStart struct {
 
 func (x *SnapshotStart) Reset() {
 	*x = SnapshotStart{}
-	mi := &file_proto_ingest_ingest_proto_msgTypes[3]
+	mi := &file_proto_wiretap_wiretap_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -480,7 +480,7 @@ func (x *SnapshotStart) String() string {
 func (*SnapshotStart) ProtoMessage() {}
 
 func (x *SnapshotStart) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ingest_ingest_proto_msgTypes[3]
+	mi := &file_proto_wiretap_wiretap_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -493,7 +493,7 @@ func (x *SnapshotStart) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SnapshotStart.ProtoReflect.Descriptor instead.
 func (*SnapshotStart) Descriptor() ([]byte, []int) {
-	return file_proto_ingest_ingest_proto_rawDescGZIP(), []int{3}
+	return file_proto_wiretap_wiretap_proto_rawDescGZIP(), []int{3}
 }
 
 type SnapshotEnd struct {
@@ -504,7 +504,7 @@ type SnapshotEnd struct {
 
 func (x *SnapshotEnd) Reset() {
 	*x = SnapshotEnd{}
-	mi := &file_proto_ingest_ingest_proto_msgTypes[4]
+	mi := &file_proto_wiretap_wiretap_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -516,7 +516,7 @@ func (x *SnapshotEnd) String() string {
 func (*SnapshotEnd) ProtoMessage() {}
 
 func (x *SnapshotEnd) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ingest_ingest_proto_msgTypes[4]
+	mi := &file_proto_wiretap_wiretap_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -529,7 +529,7 @@ func (x *SnapshotEnd) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SnapshotEnd.ProtoReflect.Descriptor instead.
 func (*SnapshotEnd) Descriptor() ([]byte, []int) {
-	return file_proto_ingest_ingest_proto_rawDescGZIP(), []int{4}
+	return file_proto_wiretap_wiretap_proto_rawDescGZIP(), []int{4}
 }
 
 type StringDef struct {
@@ -542,7 +542,7 @@ type StringDef struct {
 
 func (x *StringDef) Reset() {
 	*x = StringDef{}
-	mi := &file_proto_ingest_ingest_proto_msgTypes[5]
+	mi := &file_proto_wiretap_wiretap_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -554,7 +554,7 @@ func (x *StringDef) String() string {
 func (*StringDef) ProtoMessage() {}
 
 func (x *StringDef) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ingest_ingest_proto_msgTypes[5]
+	mi := &file_proto_wiretap_wiretap_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -567,7 +567,7 @@ func (x *StringDef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StringDef.ProtoReflect.Descriptor instead.
 func (*StringDef) Descriptor() ([]byte, []int) {
-	return file_proto_ingest_ingest_proto_rawDescGZIP(), []int{5}
+	return file_proto_wiretap_wiretap_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *StringDef) GetId() uint32 {
@@ -594,7 +594,7 @@ type PeerUpsert struct {
 
 func (x *PeerUpsert) Reset() {
 	*x = PeerUpsert{}
-	mi := &file_proto_ingest_ingest_proto_msgTypes[6]
+	mi := &file_proto_wiretap_wiretap_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -606,7 +606,7 @@ func (x *PeerUpsert) String() string {
 func (*PeerUpsert) ProtoMessage() {}
 
 func (x *PeerUpsert) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ingest_ingest_proto_msgTypes[6]
+	mi := &file_proto_wiretap_wiretap_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -619,7 +619,7 @@ func (x *PeerUpsert) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PeerUpsert.ProtoReflect.Descriptor instead.
 func (*PeerUpsert) Descriptor() ([]byte, []int) {
-	return file_proto_ingest_ingest_proto_rawDescGZIP(), []int{6}
+	return file_proto_wiretap_wiretap_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *PeerUpsert) GetPeerAlias() uint64 {
@@ -642,7 +642,7 @@ type ConnectionUpsert struct {
 	PeerAlias     uint64                 `protobuf:"varint,2,opt,name=peer_alias,json=peerAlias,proto3" json:"peer_alias,omitempty"`
 	RemoteAddr    string                 `protobuf:"bytes,3,opt,name=remote_addr,json=remoteAddr,proto3" json:"remote_addr,omitempty"`
 	LocalAddr     string                 `protobuf:"bytes,4,opt,name=local_addr,json=localAddr,proto3" json:"local_addr,omitempty"`
-	Direction     Direction              `protobuf:"varint,5,opt,name=direction,proto3,enum=wiretap.ingest.v1.Direction" json:"direction,omitempty"`
+	Direction     Direction              `protobuf:"varint,5,opt,name=direction,proto3,enum=wiretap.v1.Direction" json:"direction,omitempty"`
 	TransportId   uint32                 `protobuf:"varint,6,opt,name=transport_id,json=transportId,proto3" json:"transport_id,omitempty"`
 	SecurityId    uint32                 `protobuf:"varint,7,opt,name=security_id,json=securityId,proto3" json:"security_id,omitempty"`
 	MuxerId       uint32                 `protobuf:"varint,8,opt,name=muxer_id,json=muxerId,proto3" json:"muxer_id,omitempty"`
@@ -653,7 +653,7 @@ type ConnectionUpsert struct {
 
 func (x *ConnectionUpsert) Reset() {
 	*x = ConnectionUpsert{}
-	mi := &file_proto_ingest_ingest_proto_msgTypes[7]
+	mi := &file_proto_wiretap_wiretap_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -665,7 +665,7 @@ func (x *ConnectionUpsert) String() string {
 func (*ConnectionUpsert) ProtoMessage() {}
 
 func (x *ConnectionUpsert) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ingest_ingest_proto_msgTypes[7]
+	mi := &file_proto_wiretap_wiretap_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -678,7 +678,7 @@ func (x *ConnectionUpsert) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConnectionUpsert.ProtoReflect.Descriptor instead.
 func (*ConnectionUpsert) Descriptor() ([]byte, []int) {
-	return file_proto_ingest_ingest_proto_rawDescGZIP(), []int{7}
+	return file_proto_wiretap_wiretap_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ConnectionUpsert) GetConnAlias() uint64 {
@@ -754,7 +754,7 @@ type ConnectionClosed struct {
 
 func (x *ConnectionClosed) Reset() {
 	*x = ConnectionClosed{}
-	mi := &file_proto_ingest_ingest_proto_msgTypes[8]
+	mi := &file_proto_wiretap_wiretap_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -766,7 +766,7 @@ func (x *ConnectionClosed) String() string {
 func (*ConnectionClosed) ProtoMessage() {}
 
 func (x *ConnectionClosed) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ingest_ingest_proto_msgTypes[8]
+	mi := &file_proto_wiretap_wiretap_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -779,7 +779,7 @@ func (x *ConnectionClosed) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConnectionClosed.ProtoReflect.Descriptor instead.
 func (*ConnectionClosed) Descriptor() ([]byte, []int) {
-	return file_proto_ingest_ingest_proto_rawDescGZIP(), []int{8}
+	return file_proto_wiretap_wiretap_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ConnectionClosed) GetConnAlias() uint64 {
@@ -800,7 +800,7 @@ type StreamUpsert struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	StreamAlias   uint64                 `protobuf:"varint,1,opt,name=stream_alias,json=streamAlias,proto3" json:"stream_alias,omitempty"`
 	ConnAlias     uint64                 `protobuf:"varint,2,opt,name=conn_alias,json=connAlias,proto3" json:"conn_alias,omitempty"`
-	Direction     Direction              `protobuf:"varint,3,opt,name=direction,proto3,enum=wiretap.ingest.v1.Direction" json:"direction,omitempty"`
+	Direction     Direction              `protobuf:"varint,3,opt,name=direction,proto3,enum=wiretap.v1.Direction" json:"direction,omitempty"`
 	ProtocolId    uint32                 `protobuf:"varint,4,opt,name=protocol_id,json=protocolId,proto3" json:"protocol_id,omitempty"`
 	OpenedAtNs    int64                  `protobuf:"varint,5,opt,name=opened_at_ns,json=openedAtNs,proto3" json:"opened_at_ns,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -809,7 +809,7 @@ type StreamUpsert struct {
 
 func (x *StreamUpsert) Reset() {
 	*x = StreamUpsert{}
-	mi := &file_proto_ingest_ingest_proto_msgTypes[9]
+	mi := &file_proto_wiretap_wiretap_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -821,7 +821,7 @@ func (x *StreamUpsert) String() string {
 func (*StreamUpsert) ProtoMessage() {}
 
 func (x *StreamUpsert) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ingest_ingest_proto_msgTypes[9]
+	mi := &file_proto_wiretap_wiretap_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -834,7 +834,7 @@ func (x *StreamUpsert) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamUpsert.ProtoReflect.Descriptor instead.
 func (*StreamUpsert) Descriptor() ([]byte, []int) {
-	return file_proto_ingest_ingest_proto_rawDescGZIP(), []int{9}
+	return file_proto_wiretap_wiretap_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *StreamUpsert) GetStreamAlias() uint64 {
@@ -876,14 +876,14 @@ type StreamClosed struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	StreamAlias   uint64                 `protobuf:"varint,1,opt,name=stream_alias,json=streamAlias,proto3" json:"stream_alias,omitempty"`
 	ClosedAtNs    int64                  `protobuf:"varint,2,opt,name=closed_at_ns,json=closedAtNs,proto3" json:"closed_at_ns,omitempty"`
-	Reason        CloseReason            `protobuf:"varint,3,opt,name=reason,proto3,enum=wiretap.ingest.v1.CloseReason" json:"reason,omitempty"`
+	Reason        CloseReason            `protobuf:"varint,3,opt,name=reason,proto3,enum=wiretap.v1.CloseReason" json:"reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *StreamClosed) Reset() {
 	*x = StreamClosed{}
-	mi := &file_proto_ingest_ingest_proto_msgTypes[10]
+	mi := &file_proto_wiretap_wiretap_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -895,7 +895,7 @@ func (x *StreamClosed) String() string {
 func (*StreamClosed) ProtoMessage() {}
 
 func (x *StreamClosed) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ingest_ingest_proto_msgTypes[10]
+	mi := &file_proto_wiretap_wiretap_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -908,7 +908,7 @@ func (x *StreamClosed) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamClosed.ProtoReflect.Descriptor instead.
 func (*StreamClosed) Descriptor() ([]byte, []int) {
-	return file_proto_ingest_ingest_proto_rawDescGZIP(), []int{10}
+	return file_proto_wiretap_wiretap_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *StreamClosed) GetStreamAlias() uint64 {
@@ -935,7 +935,7 @@ func (x *StreamClosed) GetReason() CloseReason {
 type StreamChunk struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	StreamAlias   uint64                 `protobuf:"varint,1,opt,name=stream_alias,json=streamAlias,proto3" json:"stream_alias,omitempty"`
-	Direction     Direction              `protobuf:"varint,2,opt,name=direction,proto3,enum=wiretap.ingest.v1.Direction" json:"direction,omitempty"`
+	Direction     Direction              `protobuf:"varint,2,opt,name=direction,proto3,enum=wiretap.v1.Direction" json:"direction,omitempty"`
 	Data          []byte                 `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -943,7 +943,7 @@ type StreamChunk struct {
 
 func (x *StreamChunk) Reset() {
 	*x = StreamChunk{}
-	mi := &file_proto_ingest_ingest_proto_msgTypes[11]
+	mi := &file_proto_wiretap_wiretap_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -955,7 +955,7 @@ func (x *StreamChunk) String() string {
 func (*StreamChunk) ProtoMessage() {}
 
 func (x *StreamChunk) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ingest_ingest_proto_msgTypes[11]
+	mi := &file_proto_wiretap_wiretap_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -968,7 +968,7 @@ func (x *StreamChunk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamChunk.ProtoReflect.Descriptor instead.
 func (*StreamChunk) Descriptor() ([]byte, []int) {
-	return file_proto_ingest_ingest_proto_rawDescGZIP(), []int{11}
+	return file_proto_wiretap_wiretap_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *StreamChunk) GetStreamAlias() uint64 {
@@ -992,25 +992,26 @@ func (x *StreamChunk) GetData() []byte {
 	return nil
 }
 
-var File_proto_ingest_ingest_proto protoreflect.FileDescriptor
+var File_proto_wiretap_wiretap_proto protoreflect.FileDescriptor
 
-const file_proto_ingest_ingest_proto_rawDesc = "" +
+const file_proto_wiretap_wiretap_proto_rawDesc = "" +
 	"\n" +
-	"\x19proto/ingest/ingest.proto\x12\x11wiretap.ingest.v1\"\xe1\x05\n" +
+	"\x1bproto/wiretap/wiretap.proto\x12\n" +
+	"wiretap.v1\"\xa2\x05\n" +
 	"\bEnvelope\x12\x10\n" +
 	"\x03seq\x18\x01 \x01(\x04R\x03seq\x12$\n" +
-	"\x0eobserved_at_ns\x18\x02 \x01(\x03R\fobservedAtNs\x12I\n" +
-	"\x0esnapshot_start\x18\v \x01(\v2 .wiretap.ingest.v1.SnapshotStartH\x00R\rsnapshotStart\x12C\n" +
-	"\fsnapshot_end\x18\f \x01(\v2\x1e.wiretap.ingest.v1.SnapshotEndH\x00R\vsnapshotEnd\x12=\n" +
+	"\x0eobserved_at_ns\x18\x02 \x01(\x03R\fobservedAtNs\x12B\n" +
+	"\x0esnapshot_start\x18\v \x01(\v2\x19.wiretap.v1.SnapshotStartH\x00R\rsnapshotStart\x12<\n" +
+	"\fsnapshot_end\x18\f \x01(\v2\x17.wiretap.v1.SnapshotEndH\x00R\vsnapshotEnd\x126\n" +
 	"\n" +
-	"string_def\x18\x14 \x01(\v2\x1c.wiretap.ingest.v1.StringDefH\x00R\tstringDef\x12@\n" +
-	"\vpeer_upsert\x18\x15 \x01(\v2\x1d.wiretap.ingest.v1.PeerUpsertH\x00R\n" +
-	"peerUpsert\x12R\n" +
-	"\x11connection_upsert\x18\x16 \x01(\v2#.wiretap.ingest.v1.ConnectionUpsertH\x00R\x10connectionUpsert\x12R\n" +
-	"\x11connection_closed\x18\x17 \x01(\v2#.wiretap.ingest.v1.ConnectionClosedH\x00R\x10connectionClosed\x12F\n" +
-	"\rstream_upsert\x18\x18 \x01(\v2\x1f.wiretap.ingest.v1.StreamUpsertH\x00R\fstreamUpsert\x12F\n" +
-	"\rstream_closed\x18\x19 \x01(\v2\x1f.wiretap.ingest.v1.StreamClosedH\x00R\fstreamClosed\x12C\n" +
-	"\fstream_chunk\x18\x1a \x01(\v2\x1e.wiretap.ingest.v1.StreamChunkH\x00R\vstreamChunkB\t\n" +
+	"string_def\x18\x14 \x01(\v2\x15.wiretap.v1.StringDefH\x00R\tstringDef\x129\n" +
+	"\vpeer_upsert\x18\x15 \x01(\v2\x16.wiretap.v1.PeerUpsertH\x00R\n" +
+	"peerUpsert\x12K\n" +
+	"\x11connection_upsert\x18\x16 \x01(\v2\x1c.wiretap.v1.ConnectionUpsertH\x00R\x10connectionUpsert\x12K\n" +
+	"\x11connection_closed\x18\x17 \x01(\v2\x1c.wiretap.v1.ConnectionClosedH\x00R\x10connectionClosed\x12?\n" +
+	"\rstream_upsert\x18\x18 \x01(\v2\x18.wiretap.v1.StreamUpsertH\x00R\fstreamUpsert\x12?\n" +
+	"\rstream_closed\x18\x19 \x01(\v2\x18.wiretap.v1.StreamClosedH\x00R\fstreamClosed\x12<\n" +
+	"\fstream_chunk\x18\x1a \x01(\v2\x17.wiretap.v1.StreamChunkH\x00R\vstreamChunkB\t\n" +
 	"\apayloadJ\x04\b\n" +
 	"\x10\v\"\xaf\x01\n" +
 	"\vClientHello\x12)\n" +
@@ -1032,7 +1033,7 @@ const file_proto_ingest_ingest_proto_rawDesc = "" +
 	"PeerUpsert\x12\x1d\n" +
 	"\n" +
 	"peer_alias\x18\x01 \x01(\x04R\tpeerAlias\x12\x17\n" +
-	"\apeer_id\x18\x02 \x01(\fR\x06peerId\"\xcd\x02\n" +
+	"\apeer_id\x18\x02 \x01(\fR\x06peerId\"\xc6\x02\n" +
 	"\x10ConnectionUpsert\x12\x1d\n" +
 	"\n" +
 	"conn_alias\x18\x01 \x01(\x04R\tconnAlias\x12\x1d\n" +
@@ -1041,8 +1042,8 @@ const file_proto_ingest_ingest_proto_rawDesc = "" +
 	"\vremote_addr\x18\x03 \x01(\tR\n" +
 	"remoteAddr\x12\x1d\n" +
 	"\n" +
-	"local_addr\x18\x04 \x01(\tR\tlocalAddr\x12:\n" +
-	"\tdirection\x18\x05 \x01(\x0e2\x1c.wiretap.ingest.v1.DirectionR\tdirection\x12!\n" +
+	"local_addr\x18\x04 \x01(\tR\tlocalAddr\x123\n" +
+	"\tdirection\x18\x05 \x01(\x0e2\x15.wiretap.v1.DirectionR\tdirection\x12!\n" +
 	"\ftransport_id\x18\x06 \x01(\rR\vtransportId\x12\x1f\n" +
 	"\vsecurity_id\x18\a \x01(\rR\n" +
 	"securityId\x12\x19\n" +
@@ -1053,24 +1054,24 @@ const file_proto_ingest_ingest_proto_rawDesc = "" +
 	"\n" +
 	"conn_alias\x18\x01 \x01(\x04R\tconnAlias\x12 \n" +
 	"\fclosed_at_ns\x18\x02 \x01(\x03R\n" +
-	"closedAtNs\"\xcf\x01\n" +
+	"closedAtNs\"\xc8\x01\n" +
 	"\fStreamUpsert\x12!\n" +
 	"\fstream_alias\x18\x01 \x01(\x04R\vstreamAlias\x12\x1d\n" +
 	"\n" +
-	"conn_alias\x18\x02 \x01(\x04R\tconnAlias\x12:\n" +
-	"\tdirection\x18\x03 \x01(\x0e2\x1c.wiretap.ingest.v1.DirectionR\tdirection\x12\x1f\n" +
+	"conn_alias\x18\x02 \x01(\x04R\tconnAlias\x123\n" +
+	"\tdirection\x18\x03 \x01(\x0e2\x15.wiretap.v1.DirectionR\tdirection\x12\x1f\n" +
 	"\vprotocol_id\x18\x04 \x01(\rR\n" +
 	"protocolId\x12 \n" +
 	"\fopened_at_ns\x18\x05 \x01(\x03R\n" +
-	"openedAtNs\"\x8b\x01\n" +
+	"openedAtNs\"\x84\x01\n" +
 	"\fStreamClosed\x12!\n" +
 	"\fstream_alias\x18\x01 \x01(\x04R\vstreamAlias\x12 \n" +
 	"\fclosed_at_ns\x18\x02 \x01(\x03R\n" +
-	"closedAtNs\x126\n" +
-	"\x06reason\x18\x03 \x01(\x0e2\x1e.wiretap.ingest.v1.CloseReasonR\x06reason\"\x80\x01\n" +
+	"closedAtNs\x12/\n" +
+	"\x06reason\x18\x03 \x01(\x0e2\x17.wiretap.v1.CloseReasonR\x06reason\"y\n" +
 	"\vStreamChunk\x12!\n" +
-	"\fstream_alias\x18\x01 \x01(\x04R\vstreamAlias\x12:\n" +
-	"\tdirection\x18\x02 \x01(\x0e2\x1c.wiretap.ingest.v1.DirectionR\tdirection\x12\x12\n" +
+	"\fstream_alias\x18\x01 \x01(\x04R\vstreamAlias\x123\n" +
+	"\tdirection\x18\x02 \x01(\x0e2\x15.wiretap.v1.DirectionR\tdirection\x12\x12\n" +
 	"\x04data\x18\x03 \x01(\fR\x04data*G\n" +
 	"\tDirection\x12\x15\n" +
 	"\x11DIRECTION_UNKNOWN\x10\x00\x12\x10\n" +
@@ -1080,52 +1081,52 @@ const file_proto_ingest_ingest_proto_rawDesc = "" +
 	"\x14CLOSE_REASON_UNKNOWN\x10\x00\x12\x16\n" +
 	"\x12CLOSE_REASON_CLOSE\x10\x01\x12\x16\n" +
 	"\x12CLOSE_REASON_RESET\x10\x02\x12\x1c\n" +
-	"\x18CLOSE_REASON_CONN_CLOSED\x10\x03B.Z,github.com/ethp2p/xray/proto/ingest;ingestpbb\x06proto3"
+	"\x18CLOSE_REASON_CONN_CLOSED\x10\x03B0Z.github.com/ethp2p/xray/proto/wiretap;wiretappbb\x06proto3"
 
 var (
-	file_proto_ingest_ingest_proto_rawDescOnce sync.Once
-	file_proto_ingest_ingest_proto_rawDescData []byte
+	file_proto_wiretap_wiretap_proto_rawDescOnce sync.Once
+	file_proto_wiretap_wiretap_proto_rawDescData []byte
 )
 
-func file_proto_ingest_ingest_proto_rawDescGZIP() []byte {
-	file_proto_ingest_ingest_proto_rawDescOnce.Do(func() {
-		file_proto_ingest_ingest_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_proto_ingest_ingest_proto_rawDesc), len(file_proto_ingest_ingest_proto_rawDesc)))
+func file_proto_wiretap_wiretap_proto_rawDescGZIP() []byte {
+	file_proto_wiretap_wiretap_proto_rawDescOnce.Do(func() {
+		file_proto_wiretap_wiretap_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_proto_wiretap_wiretap_proto_rawDesc), len(file_proto_wiretap_wiretap_proto_rawDesc)))
 	})
-	return file_proto_ingest_ingest_proto_rawDescData
+	return file_proto_wiretap_wiretap_proto_rawDescData
 }
 
-var file_proto_ingest_ingest_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_proto_ingest_ingest_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
-var file_proto_ingest_ingest_proto_goTypes = []any{
-	(Direction)(0),           // 0: wiretap.ingest.v1.Direction
-	(CloseReason)(0),         // 1: wiretap.ingest.v1.CloseReason
-	(*Envelope)(nil),         // 2: wiretap.ingest.v1.Envelope
-	(*ClientHello)(nil),      // 3: wiretap.ingest.v1.ClientHello
-	(*ServerHello)(nil),      // 4: wiretap.ingest.v1.ServerHello
-	(*SnapshotStart)(nil),    // 5: wiretap.ingest.v1.SnapshotStart
-	(*SnapshotEnd)(nil),      // 6: wiretap.ingest.v1.SnapshotEnd
-	(*StringDef)(nil),        // 7: wiretap.ingest.v1.StringDef
-	(*PeerUpsert)(nil),       // 8: wiretap.ingest.v1.PeerUpsert
-	(*ConnectionUpsert)(nil), // 9: wiretap.ingest.v1.ConnectionUpsert
-	(*ConnectionClosed)(nil), // 10: wiretap.ingest.v1.ConnectionClosed
-	(*StreamUpsert)(nil),     // 11: wiretap.ingest.v1.StreamUpsert
-	(*StreamClosed)(nil),     // 12: wiretap.ingest.v1.StreamClosed
-	(*StreamChunk)(nil),      // 13: wiretap.ingest.v1.StreamChunk
+var file_proto_wiretap_wiretap_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_proto_wiretap_wiretap_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_proto_wiretap_wiretap_proto_goTypes = []any{
+	(Direction)(0),           // 0: wiretap.v1.Direction
+	(CloseReason)(0),         // 1: wiretap.v1.CloseReason
+	(*Envelope)(nil),         // 2: wiretap.v1.Envelope
+	(*ClientHello)(nil),      // 3: wiretap.v1.ClientHello
+	(*ServerHello)(nil),      // 4: wiretap.v1.ServerHello
+	(*SnapshotStart)(nil),    // 5: wiretap.v1.SnapshotStart
+	(*SnapshotEnd)(nil),      // 6: wiretap.v1.SnapshotEnd
+	(*StringDef)(nil),        // 7: wiretap.v1.StringDef
+	(*PeerUpsert)(nil),       // 8: wiretap.v1.PeerUpsert
+	(*ConnectionUpsert)(nil), // 9: wiretap.v1.ConnectionUpsert
+	(*ConnectionClosed)(nil), // 10: wiretap.v1.ConnectionClosed
+	(*StreamUpsert)(nil),     // 11: wiretap.v1.StreamUpsert
+	(*StreamClosed)(nil),     // 12: wiretap.v1.StreamClosed
+	(*StreamChunk)(nil),      // 13: wiretap.v1.StreamChunk
 }
-var file_proto_ingest_ingest_proto_depIdxs = []int32{
-	5,  // 0: wiretap.ingest.v1.Envelope.snapshot_start:type_name -> wiretap.ingest.v1.SnapshotStart
-	6,  // 1: wiretap.ingest.v1.Envelope.snapshot_end:type_name -> wiretap.ingest.v1.SnapshotEnd
-	7,  // 2: wiretap.ingest.v1.Envelope.string_def:type_name -> wiretap.ingest.v1.StringDef
-	8,  // 3: wiretap.ingest.v1.Envelope.peer_upsert:type_name -> wiretap.ingest.v1.PeerUpsert
-	9,  // 4: wiretap.ingest.v1.Envelope.connection_upsert:type_name -> wiretap.ingest.v1.ConnectionUpsert
-	10, // 5: wiretap.ingest.v1.Envelope.connection_closed:type_name -> wiretap.ingest.v1.ConnectionClosed
-	11, // 6: wiretap.ingest.v1.Envelope.stream_upsert:type_name -> wiretap.ingest.v1.StreamUpsert
-	12, // 7: wiretap.ingest.v1.Envelope.stream_closed:type_name -> wiretap.ingest.v1.StreamClosed
-	13, // 8: wiretap.ingest.v1.Envelope.stream_chunk:type_name -> wiretap.ingest.v1.StreamChunk
-	0,  // 9: wiretap.ingest.v1.ConnectionUpsert.direction:type_name -> wiretap.ingest.v1.Direction
-	0,  // 10: wiretap.ingest.v1.StreamUpsert.direction:type_name -> wiretap.ingest.v1.Direction
-	1,  // 11: wiretap.ingest.v1.StreamClosed.reason:type_name -> wiretap.ingest.v1.CloseReason
-	0,  // 12: wiretap.ingest.v1.StreamChunk.direction:type_name -> wiretap.ingest.v1.Direction
+var file_proto_wiretap_wiretap_proto_depIdxs = []int32{
+	5,  // 0: wiretap.v1.Envelope.snapshot_start:type_name -> wiretap.v1.SnapshotStart
+	6,  // 1: wiretap.v1.Envelope.snapshot_end:type_name -> wiretap.v1.SnapshotEnd
+	7,  // 2: wiretap.v1.Envelope.string_def:type_name -> wiretap.v1.StringDef
+	8,  // 3: wiretap.v1.Envelope.peer_upsert:type_name -> wiretap.v1.PeerUpsert
+	9,  // 4: wiretap.v1.Envelope.connection_upsert:type_name -> wiretap.v1.ConnectionUpsert
+	10, // 5: wiretap.v1.Envelope.connection_closed:type_name -> wiretap.v1.ConnectionClosed
+	11, // 6: wiretap.v1.Envelope.stream_upsert:type_name -> wiretap.v1.StreamUpsert
+	12, // 7: wiretap.v1.Envelope.stream_closed:type_name -> wiretap.v1.StreamClosed
+	13, // 8: wiretap.v1.Envelope.stream_chunk:type_name -> wiretap.v1.StreamChunk
+	0,  // 9: wiretap.v1.ConnectionUpsert.direction:type_name -> wiretap.v1.Direction
+	0,  // 10: wiretap.v1.StreamUpsert.direction:type_name -> wiretap.v1.Direction
+	1,  // 11: wiretap.v1.StreamClosed.reason:type_name -> wiretap.v1.CloseReason
+	0,  // 12: wiretap.v1.StreamChunk.direction:type_name -> wiretap.v1.Direction
 	13, // [13:13] is the sub-list for method output_type
 	13, // [13:13] is the sub-list for method input_type
 	13, // [13:13] is the sub-list for extension type_name
@@ -1133,12 +1134,12 @@ var file_proto_ingest_ingest_proto_depIdxs = []int32{
 	0,  // [0:13] is the sub-list for field type_name
 }
 
-func init() { file_proto_ingest_ingest_proto_init() }
-func file_proto_ingest_ingest_proto_init() {
-	if File_proto_ingest_ingest_proto != nil {
+func init() { file_proto_wiretap_wiretap_proto_init() }
+func file_proto_wiretap_wiretap_proto_init() {
+	if File_proto_wiretap_wiretap_proto != nil {
 		return
 	}
-	file_proto_ingest_ingest_proto_msgTypes[0].OneofWrappers = []any{
+	file_proto_wiretap_wiretap_proto_msgTypes[0].OneofWrappers = []any{
 		(*Envelope_SnapshotStart)(nil),
 		(*Envelope_SnapshotEnd)(nil),
 		(*Envelope_StringDef)(nil),
@@ -1153,18 +1154,18 @@ func file_proto_ingest_ingest_proto_init() {
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_ingest_ingest_proto_rawDesc), len(file_proto_ingest_ingest_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_wiretap_wiretap_proto_rawDesc), len(file_proto_wiretap_wiretap_proto_rawDesc)),
 			NumEnums:      2,
 			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_proto_ingest_ingest_proto_goTypes,
-		DependencyIndexes: file_proto_ingest_ingest_proto_depIdxs,
-		EnumInfos:         file_proto_ingest_ingest_proto_enumTypes,
-		MessageInfos:      file_proto_ingest_ingest_proto_msgTypes,
+		GoTypes:           file_proto_wiretap_wiretap_proto_goTypes,
+		DependencyIndexes: file_proto_wiretap_wiretap_proto_depIdxs,
+		EnumInfos:         file_proto_wiretap_wiretap_proto_enumTypes,
+		MessageInfos:      file_proto_wiretap_wiretap_proto_msgTypes,
 	}.Build()
-	File_proto_ingest_ingest_proto = out.File
-	file_proto_ingest_ingest_proto_goTypes = nil
-	file_proto_ingest_ingest_proto_depIdxs = nil
+	File_proto_wiretap_wiretap_proto = out.File
+	file_proto_wiretap_wiretap_proto_goTypes = nil
+	file_proto_wiretap_wiretap_proto_depIdxs = nil
 }

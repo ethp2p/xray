@@ -7,8 +7,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	ingestpb "github.com/ethp2p/xray/proto/ingest"
-	"github.com/ethp2p/xray/wire"
+	wiretappb "github.com/ethp2p/xray/proto/wiretap"
+	"github.com/ethp2p/xray/proto/wiretap/wire"
 )
 
 // SinkIngest dials the backend's ingest listener and streams envelopes. On
@@ -29,7 +29,7 @@ type SinkIngest struct {
 	sourceID      string
 
 	conn           net.Conn
-	sendCh         chan *ingestpb.Envelope
+	sendCh         chan *wiretappb.Envelope
 	done           chan struct{}
 	attached       chan struct{}
 	attachedClosed atomic.Bool
@@ -50,7 +50,7 @@ func NewSinkIngest(address string, emitter *Emitter, clientName string, localPee
 		bootID:        []byte(time.Now().UTC().Format(time.RFC3339Nano)),
 		startedAtNs:   time.Now().UnixNano(),
 		waitForAttach: waitForAttach,
-		sendCh:        make(chan *ingestpb.Envelope, 1024),
+		sendCh:        make(chan *wiretappb.Envelope, 1024),
 		done:          make(chan struct{}),
 		attached:      make(chan struct{}),
 	}
@@ -71,7 +71,7 @@ func (s *SinkIngest) WaitForAttach() error {
 
 // Write enqueues an envelope for transmission. Drops silently if the buffer is
 // full; the emitter's ring buffer remains the source of truth for catch-up.
-func (s *SinkIngest) Write(env *ingestpb.Envelope) bool {
+func (s *SinkIngest) Write(env *wiretappb.Envelope) bool {
 	if s.closed.Load() {
 		return false
 	}
@@ -138,7 +138,7 @@ func (s *SinkIngest) connect() error {
 		return err
 	}
 
-	hello := &ingestpb.ClientHello{
+	hello := &wiretappb.ClientHello{
 		ProtocolVersion: wire.IngestProtocolVersion,
 		PeerId:          s.localPeerID,
 		ClientName:      s.clientName,

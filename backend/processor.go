@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/ethp2p/xray/eth"
-	ingestpb "github.com/ethp2p/xray/proto/ingest"
+	wiretappb "github.com/ethp2p/xray/proto/wiretap"
 )
 
 const slotBucketWidthMs = 100
@@ -76,25 +76,25 @@ func (p *Processor) SetOnFinalize(fn func(string, SlotDetail)) {
 	p.onFinalize = fn
 }
 
-func (p *Processor) ApplyForSource(sourceID string, event *ingestpb.Envelope) {
+func (p *Processor) ApplyForSource(sourceID string, event *wiretappb.Envelope) {
 	if event == nil {
 		return
 	}
 
 	switch payload := event.Payload.(type) {
-	case *ingestpb.Envelope_StringDef:
+	case *wiretappb.Envelope_StringDef:
 		p.mu.Lock()
 		src := p.ensureSourceLocked(sourceID)
 		src.strings[payload.StringDef.Id] = payload.StringDef.Value
 		p.mu.Unlock()
 
-	case *ingestpb.Envelope_PeerUpsert:
+	case *wiretappb.Envelope_PeerUpsert:
 		p.mu.Lock()
 		src := p.ensureSourceLocked(sourceID)
 		src.peers.UpsertPeer(payload.PeerUpsert.PeerAlias, payload.PeerUpsert.PeerId)
 		p.mu.Unlock()
 
-	case *ingestpb.Envelope_ConnectionUpsert:
+	case *wiretappb.Envelope_ConnectionUpsert:
 		cu := payload.ConnectionUpsert
 		p.mu.Lock()
 		src := p.ensureSourceLocked(sourceID)
@@ -110,19 +110,19 @@ func (p *Processor) ApplyForSource(sourceID string, event *ingestpb.Envelope) {
 		})
 		p.mu.Unlock()
 
-	case *ingestpb.Envelope_ConnectionClosed:
+	case *wiretappb.Envelope_ConnectionClosed:
 		p.mu.Lock()
 		src := p.ensureSourceLocked(sourceID)
 		src.peers.CloseConnection(payload.ConnectionClosed.ConnAlias)
 		p.mu.Unlock()
 
-	case *ingestpb.Envelope_StreamUpsert:
+	case *wiretappb.Envelope_StreamUpsert:
 		p.handleStreamUpsert(sourceID, payload.StreamUpsert)
 
-	case *ingestpb.Envelope_StreamClosed:
+	case *wiretappb.Envelope_StreamClosed:
 		p.handleStreamClosed(sourceID, payload.StreamClosed)
 
-	case *ingestpb.Envelope_StreamChunk:
+	case *wiretappb.Envelope_StreamChunk:
 		p.handleStreamChunk(sourceID, event.ObservedAtNs, payload.StreamChunk)
 	}
 }
@@ -222,7 +222,7 @@ func (p *Processor) ensureSourceLocked(sourceID string) *sourceState {
 	return src
 }
 
-func (p *Processor) handleStreamUpsert(sourceID string, stream *ingestpb.StreamUpsert) {
+func (p *Processor) handleStreamUpsert(sourceID string, stream *wiretappb.StreamUpsert) {
 	if stream == nil {
 		return
 	}
@@ -238,7 +238,7 @@ func (p *Processor) handleStreamUpsert(sourceID string, stream *ingestpb.StreamU
 	}
 }
 
-func (p *Processor) handleStreamClosed(sourceID string, stream *ingestpb.StreamClosed) {
+func (p *Processor) handleStreamClosed(sourceID string, stream *wiretappb.StreamClosed) {
 	if stream == nil {
 		return
 	}
@@ -253,7 +253,7 @@ func (p *Processor) handleStreamClosed(sourceID string, stream *ingestpb.StreamC
 	delete(src.streams, stream.StreamAlias)
 }
 
-func (p *Processor) handleStreamChunk(sourceID string, observedAtNs int64, chunk *ingestpb.StreamChunk) {
+func (p *Processor) handleStreamChunk(sourceID string, observedAtNs int64, chunk *wiretappb.StreamChunk) {
 	if chunk == nil {
 		return
 	}
@@ -337,14 +337,14 @@ func (p *Processor) handleStreamChunk(sourceID string, observedAtNs int64, chunk
 		if bleedDistance > 0 {
 			wb := uint64(wireBytes)
 			switch chunk.Direction {
-			case ingestpb.Direction_DIRECTION_IN:
+			case wiretappb.Direction_DIRECTION_IN:
 				if agg.summary.Meta.BleedBytesIn == nil {
 					v := wb
 					agg.summary.Meta.BleedBytesIn = &v
 				} else {
 					*agg.summary.Meta.BleedBytesIn += wb
 				}
-			case ingestpb.Direction_DIRECTION_OUT:
+			case wiretappb.Direction_DIRECTION_OUT:
 				if agg.summary.Meta.BleedBytesOut == nil {
 					v := wb
 					agg.summary.Meta.BleedBytesOut = &v
@@ -354,7 +354,7 @@ func (p *Processor) handleStreamChunk(sourceID string, observedAtNs int64, chunk
 			}
 		}
 
-		if topic == "beacon_block" && msgKind == "PUBLISH" && chunk.Direction == ingestpb.Direction_DIRECTION_IN {
+		if topic == "beacon_block" && msgKind == "PUBLISH" && chunk.Direction == wiretappb.Direction_DIRECTION_IN {
 			if v := tagValue(tags, eth.TagProposerIndex); v != "" {
 				if idx, err := strconv.ParseUint(v, 10, 64); err == nil {
 					agg.summary.Meta.ProposerIndex = &idx
@@ -380,9 +380,9 @@ func (p *Processor) handleStreamChunk(sourceID string, observedAtNs int64, chunk
 
 	var err error
 	switch chunk.Direction {
-	case ingestpb.Direction_DIRECTION_IN:
+	case wiretappb.Direction_DIRECTION_IN:
 		err = state.decoder.ObserveRead(chunk.Data, emit)
-	case ingestpb.Direction_DIRECTION_OUT:
+	case wiretappb.Direction_DIRECTION_OUT:
 		err = state.decoder.ObserveWrite(chunk.Data, emit)
 	}
 	if err != nil {
@@ -482,7 +482,7 @@ func ensureSlotLocked(src *sourceState, ref eth.SlotRef) *slotAggregate {
 	return agg
 }
 
-func addRawTrafficLocked(agg *slotAggregate, observedAtNs, offsetMs int64, dir ingestpb.Direction, bytes uint64) {
+func addRawTrafficLocked(agg *slotAggregate, observedAtNs, offsetMs int64, dir wiretappb.Direction, bytes uint64) {
 	bucketOffset := (offsetMs / slotBucketWidthMs) * slotBucketWidthMs
 	point := agg.buckets[bucketOffset]
 	if point == nil {
@@ -491,17 +491,17 @@ func addRawTrafficLocked(agg *slotAggregate, observedAtNs, offsetMs int64, dir i
 	}
 
 	switch dir {
-	case ingestpb.Direction_DIRECTION_IN:
+	case wiretappb.Direction_DIRECTION_IN:
 		agg.summary.BytesIn += bytes
 		point.BytesIn += bytes
-	case ingestpb.Direction_DIRECTION_OUT:
+	case wiretappb.Direction_DIRECTION_OUT:
 		agg.summary.BytesOut += bytes
 		point.BytesOut += bytes
 	}
 	agg.summary.LastUpdatedNs = observedAtNs
 }
 
-func addBreakdownLocked(agg *slotAggregate, bucketOffset int64, dir ingestpb.Direction, bytes uint64, protocol, topic, messageKind string, bleedDistance int) {
+func addBreakdownLocked(agg *slotAggregate, bucketOffset int64, dir wiretappb.Direction, bytes uint64, protocol, topic, messageKind string, bleedDistance int) {
 	key := slotKey{protocol: protocol, topic: topic, messageKind: messageKind}
 
 	row := agg.breakdown[key]
@@ -511,12 +511,12 @@ func addBreakdownLocked(agg *slotAggregate, bucketOffset int64, dir ingestpb.Dir
 	}
 	row.MsgCount++
 	switch dir {
-	case ingestpb.Direction_DIRECTION_IN:
+	case wiretappb.Direction_DIRECTION_IN:
 		row.BytesIn += bytes
 		if bleedDistance > 0 {
 			row.BleedBytesIn += bytes
 		}
-	case ingestpb.Direction_DIRECTION_OUT:
+	case wiretappb.Direction_DIRECTION_OUT:
 		row.BytesOut += bytes
 		if bleedDistance > 0 {
 			row.BleedBytesOut += bytes
@@ -535,12 +535,12 @@ func addBreakdownLocked(agg *slotAggregate, bucketOffset int64, dir ingestpb.Dir
 	}
 	bb.MsgCount++
 	switch dir {
-	case ingestpb.Direction_DIRECTION_IN:
+	case wiretappb.Direction_DIRECTION_IN:
 		bb.BytesIn += bytes
 		if bleedDistance > 0 {
 			bb.BleedBytesIn += bytes
 		}
-	case ingestpb.Direction_DIRECTION_OUT:
+	case wiretappb.Direction_DIRECTION_OUT:
 		bb.BytesOut += bytes
 		if bleedDistance > 0 {
 			bb.BleedBytesOut += bytes
@@ -558,9 +558,9 @@ func addBreakdownLocked(agg *slotAggregate, bucketOffset int64, dir ingestpb.Dir
 		}
 		entry := row.BleedByDistance[distKey]
 		switch dir {
-		case ingestpb.Direction_DIRECTION_IN:
+		case wiretappb.Direction_DIRECTION_IN:
 			entry.BytesIn += bytes
-		case ingestpb.Direction_DIRECTION_OUT:
+		case wiretappb.Direction_DIRECTION_OUT:
 			entry.BytesOut += bytes
 		}
 		row.BleedByDistance[distKey] = entry
@@ -570,9 +570,9 @@ func addBreakdownLocked(agg *slotAggregate, bucketOffset int64, dir ingestpb.Dir
 		}
 		bbEntry := bb.BleedByDistance[distKey]
 		switch dir {
-		case ingestpb.Direction_DIRECTION_IN:
+		case wiretappb.Direction_DIRECTION_IN:
 			bbEntry.BytesIn += bytes
-		case ingestpb.Direction_DIRECTION_OUT:
+		case wiretappb.Direction_DIRECTION_OUT:
 			bbEntry.BytesOut += bytes
 		}
 		bb.BleedByDistance[distKey] = bbEntry
@@ -587,11 +587,11 @@ func (p *Processor) currentSlotLocked() uint64 {
 	return ref.Slot
 }
 
-func dirString(d ingestpb.Direction) string {
+func dirString(d wiretappb.Direction) string {
 	switch d {
-	case ingestpb.Direction_DIRECTION_IN:
+	case wiretappb.Direction_DIRECTION_IN:
 		return "inbound"
-	case ingestpb.Direction_DIRECTION_OUT:
+	case wiretappb.Direction_DIRECTION_OUT:
 		return "outbound"
 	default:
 		return "unknown"

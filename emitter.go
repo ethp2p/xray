@@ -5,7 +5,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	ingestpb "github.com/ethp2p/xray/proto/ingest"
+	wiretappb "github.com/ethp2p/xray/proto/wiretap"
 )
 
 // DefaultRingBufferSize is the default number of envelopes to keep in the ring buffer.
@@ -18,7 +18,7 @@ type Emitter struct {
 
 	nextSeq uint64
 
-	buffer    []*ingestpb.Envelope
+	buffer    []*wiretappb.Envelope
 	bufferIdx int
 	bufferLen int
 
@@ -41,7 +41,7 @@ func NewEmitter(bufferSize int) *Emitter {
 		bufferSize = DefaultRingBufferSize
 	}
 	return &Emitter{
-		buffer: make([]*ingestpb.Envelope, bufferSize),
+		buffer: make([]*wiretappb.Envelope, bufferSize),
 	}
 }
 
@@ -62,7 +62,7 @@ func (e *Emitter) NextStreamID() uint32 {
 
 // Emit assigns a sequence number and observed-at timestamp, adds the envelope
 // to the ring buffer, and fans out to all sinks.
-func (e *Emitter) Emit(env *ingestpb.Envelope) {
+func (e *Emitter) Emit(env *wiretappb.Envelope) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -82,7 +82,7 @@ func (e *Emitter) Emit(env *ingestpb.Envelope) {
 	}
 }
 
-func (e *Emitter) addToBufferLocked(env *ingestpb.Envelope) {
+func (e *Emitter) addToBufferLocked(env *wiretappb.Envelope) {
 	e.buffer[e.bufferIdx] = env
 	e.bufferIdx = (e.bufferIdx + 1) % len(e.buffer)
 	if e.bufferLen < len(e.buffer) {
@@ -94,9 +94,9 @@ func (e *Emitter) addToBufferLocked(env *ingestpb.Envelope) {
 // new sink as a sequence of upsert envelopes.
 type Snapshot struct {
 	Strings     []string
-	Peers       []*ingestpb.PeerUpsert
-	Connections []*ingestpb.ConnectionUpsert
-	Streams     []*ingestpb.StreamUpsert
+	Peers       []*wiretappb.PeerUpsert
+	Connections []*wiretappb.ConnectionUpsert
+	Streams     []*wiretappb.StreamUpsert
 }
 
 // Snapshot returns the current state. Callers replay it as envelopes to bring

@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	ingestpb "github.com/ethp2p/xray/proto/ingest"
-	"github.com/ethp2p/xray/wire"
+	wiretappb "github.com/ethp2p/xray/proto/wiretap"
+	"github.com/ethp2p/xray/proto/wiretap/wire"
 )
 
 // IngestListener accepts inbound connections from probes, performs a
@@ -108,7 +108,7 @@ func (l *IngestListener) handleConnection(conn net.Conn) {
 		cancel()
 	}()
 
-	err = wire.WriteServerHello(conn, &ingestpb.ServerHello{
+	err = wire.WriteServerHello(conn, &wiretappb.ServerHello{
 		ProtocolVersion: wire.IngestProtocolVersion,
 		SourceId:        sourceID,
 	})

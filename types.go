@@ -1,12 +1,12 @@
 package xray
 
-import ingestpb "github.com/ethp2p/xray/proto/ingest"
+import wiretappb "github.com/ethp2p/xray/proto/wiretap"
 
 // Sink receives envelopes from the emitter.
 type Sink interface {
 	// Write delivers an envelope to the sink.
 	// Returns false if the sink cannot accept (backpressure).
-	Write(env *ingestpb.Envelope) bool
+	Write(env *wiretappb.Envelope) bool
 
 	// Close shuts down the sink.
 	Close() error

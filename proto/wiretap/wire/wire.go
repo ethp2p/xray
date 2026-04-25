@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	ingestpb "github.com/ethp2p/xray/proto/ingest"
+	wiretappb "github.com/ethp2p/xray/proto/wiretap"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -19,36 +19,36 @@ const (
 	IngestProtocolVersion uint32 = 2
 )
 
-func WriteClientHello(w io.Writer, msg *ingestpb.ClientHello) error {
+func WriteClientHello(w io.Writer, msg *wiretappb.ClientHello) error {
 	return WriteTyped(w, WireClientHello, msg)
 }
 
-func ReadClientHello(r io.Reader) (*ingestpb.ClientHello, error) {
-	msg := &ingestpb.ClientHello{}
+func ReadClientHello(r io.Reader) (*wiretappb.ClientHello, error) {
+	msg := &wiretappb.ClientHello{}
 	if err := ReadTyped(r, WireClientHello, msg); err != nil {
 		return nil, err
 	}
 	return msg, nil
 }
 
-func WriteServerHello(w io.Writer, msg *ingestpb.ServerHello) error {
+func WriteServerHello(w io.Writer, msg *wiretappb.ServerHello) error {
 	return WriteTyped(w, WireServerHello, msg)
 }
 
-func ReadServerHello(r io.Reader) (*ingestpb.ServerHello, error) {
-	msg := &ingestpb.ServerHello{}
+func ReadServerHello(r io.Reader) (*wiretappb.ServerHello, error) {
+	msg := &wiretappb.ServerHello{}
 	if err := ReadTyped(r, WireServerHello, msg); err != nil {
 		return nil, err
 	}
 	return msg, nil
 }
 
-func WriteEnvelope(w io.Writer, msg *ingestpb.Envelope) error {
+func WriteEnvelope(w io.Writer, msg *wiretappb.Envelope) error {
 	return WriteTyped(w, WireEnvelope, msg)
 }
 
-func ReadEnvelope(r io.Reader) (*ingestpb.Envelope, error) {
-	msg := &ingestpb.Envelope{}
+func ReadEnvelope(r io.Reader) (*wiretappb.Envelope, error) {
+	msg := &wiretappb.Envelope{}
 	if err := ReadTyped(r, WireEnvelope, msg); err != nil {
 		return nil, err
 	}

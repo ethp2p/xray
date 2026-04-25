@@ -8,7 +8,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	ingestpb "github.com/ethp2p/xray/proto/ingest"
+	wiretappb "github.com/ethp2p/xray/proto/wiretap"
 )
 
 // SinkFile writes envelopes to disk as length-delimited protobuf, prefixed with
@@ -61,7 +61,7 @@ func NewSinkFile(path string, emitter *Emitter, opts ...SinkFileOption) (*SinkFi
 }
 
 // Write delivers an envelope to the file.
-func (s *SinkFile) Write(env *ingestpb.Envelope) bool {
+func (s *SinkFile) Write(env *wiretappb.Envelope) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -72,7 +72,7 @@ func (s *SinkFile) Write(env *ingestpb.Envelope) bool {
 	return s.writeEnvelopeLocked(env) == nil
 }
 
-func (s *SinkFile) writeEnvelopeLocked(env *ingestpb.Envelope) error {
+func (s *SinkFile) writeEnvelopeLocked(env *wiretappb.Envelope) error {
 	data, err := proto.Marshal(env)
 	if err != nil {
 		return err
@@ -135,35 +135,35 @@ func (s *SinkFile) snapshotLoop() {
 // snapshotEnvelopes converts a Snapshot into a sequence of envelopes wrapped
 // between SnapshotStart and SnapshotEnd markers. Used by both SinkFile and
 // SinkIngest to bring a fresh consumer up to date.
-func snapshotEnvelopes(snap Snapshot) []*ingestpb.Envelope {
-	envs := make([]*ingestpb.Envelope, 0, 2+len(snap.Strings)+len(snap.Peers)+len(snap.Connections)+len(snap.Streams))
-	envs = append(envs, &ingestpb.Envelope{
-		Payload: &ingestpb.Envelope_SnapshotStart{SnapshotStart: &ingestpb.SnapshotStart{}},
+func snapshotEnvelopes(snap Snapshot) []*wiretappb.Envelope {
+	envs := make([]*wiretappb.Envelope, 0, 2+len(snap.Strings)+len(snap.Peers)+len(snap.Connections)+len(snap.Streams))
+	envs = append(envs, &wiretappb.Envelope{
+		Payload: &wiretappb.Envelope_SnapshotStart{SnapshotStart: &wiretappb.SnapshotStart{}},
 	})
 	for id, value := range snap.Strings {
-		envs = append(envs, &ingestpb.Envelope{
-			Payload: &ingestpb.Envelope_StringDef{
-				StringDef: &ingestpb.StringDef{Id: uint32(id), Value: value},
+		envs = append(envs, &wiretappb.Envelope{
+			Payload: &wiretappb.Envelope_StringDef{
+				StringDef: &wiretappb.StringDef{Id: uint32(id), Value: value},
 			},
 		})
 	}
 	for _, p := range snap.Peers {
-		envs = append(envs, &ingestpb.Envelope{
-			Payload: &ingestpb.Envelope_PeerUpsert{PeerUpsert: p},
+		envs = append(envs, &wiretappb.Envelope{
+			Payload: &wiretappb.Envelope_PeerUpsert{PeerUpsert: p},
 		})
 	}
 	for _, c := range snap.Connections {
-		envs = append(envs, &ingestpb.Envelope{
-			Payload: &ingestpb.Envelope_ConnectionUpsert{ConnectionUpsert: c},
+		envs = append(envs, &wiretappb.Envelope{
+			Payload: &wiretappb.Envelope_ConnectionUpsert{ConnectionUpsert: c},
 		})
 	}
 	for _, st := range snap.Streams {
-		envs = append(envs, &ingestpb.Envelope{
-			Payload: &ingestpb.Envelope_StreamUpsert{StreamUpsert: st},
+		envs = append(envs, &wiretappb.Envelope{
+			Payload: &wiretappb.Envelope_StreamUpsert{StreamUpsert: st},
 		})
 	}
-	envs = append(envs, &ingestpb.Envelope{
-		Payload: &ingestpb.Envelope_SnapshotEnd{SnapshotEnd: &ingestpb.SnapshotEnd{}},
+	envs = append(envs, &wiretappb.Envelope{
+		Payload: &wiretappb.Envelope_SnapshotEnd{SnapshotEnd: &wiretappb.SnapshotEnd{}},
 	})
 	return envs
 }

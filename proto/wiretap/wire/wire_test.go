@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"testing"
 
-	ingestpb "github.com/ethp2p/xray/proto/ingest"
+	wiretappb "github.com/ethp2p/xray/proto/wiretap"
 )
 
 func TestRoundTripClientHello(t *testing.T) {
 	var buf bytes.Buffer
-	hello := &ingestpb.ClientHello{
+	hello := &wiretappb.ClientHello{
 		ProtocolVersion: 2,
 		PeerId:          []byte("test-peer"),
 		ClientName:      "prysm/v5.2.0",
@@ -28,10 +28,10 @@ func TestRoundTripClientHello(t *testing.T) {
 
 func TestRoundTripEnvelope(t *testing.T) {
 	var buf bytes.Buffer
-	env := &ingestpb.Envelope{
+	env := &wiretappb.Envelope{
 		Seq: 42,
-		Payload: &ingestpb.Envelope_StringDef{
-			StringDef: &ingestpb.StringDef{Id: 1, Value: "test"},
+		Payload: &wiretappb.Envelope_StringDef{
+			StringDef: &wiretappb.StringDef{Id: 1, Value: "test"},
 		},
 	}
 	if err := WriteEnvelope(&buf, env); err != nil {
