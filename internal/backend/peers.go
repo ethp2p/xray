@@ -1,7 +1,13 @@
 package backend
 
-import "github.com/libp2p/go-libp2p/core/peer"
+import (
+	"github.com/libp2p/go-libp2p/core/peer"
 
+	"github.com/ethp2p/xray/api"
+)
+
+// ConnState mirrors api.ConnState for internal mutation. PeerAlias is internal
+// (json:"-") and not part of the public contract.
 type ConnState struct {
 	PeerAlias  uint64 `json:"-"`
 	RemoteAddr string `json:"remote_addr"`
@@ -13,18 +19,14 @@ type ConnState struct {
 	OpenedAtNs int64  `json:"opened_at_ns"`
 }
 
+// PeerSummary aliases api.PeerSummary for the JSON response.
+type PeerSummary = api.PeerSummary
+
 type PeerState struct {
 	PeerID      []byte
 	Connections map[uint64]*ConnState
 	FirstSeenNs int64
 	LastSeenNs  int64
-}
-
-type PeerSummary struct {
-	PeerID      string      `json:"peer_id"`
-	Connections []ConnState `json:"connections"`
-	FirstSeenNs int64       `json:"first_seen_ns"`
-	LastSeenNs  int64       `json:"last_seen_ns"`
 }
 
 type PeerMap struct {
@@ -99,7 +101,15 @@ func (m *PeerMap) ListPeers() []PeerSummary {
 			LastSeenNs:  ps.LastSeenNs,
 		}
 		for _, conn := range ps.Connections {
-			summary.Connections = append(summary.Connections, *conn)
+			summary.Connections = append(summary.Connections, api.ConnState{
+				RemoteAddr: conn.RemoteAddr,
+				LocalAddr:  conn.LocalAddr,
+				Direction:  conn.Direction,
+				Transport:  conn.Transport,
+				Security:   conn.Security,
+				Muxer:      conn.Muxer,
+				OpenedAtNs: conn.OpenedAtNs,
+			})
 		}
 		result = append(result, summary)
 	}
