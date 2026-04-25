@@ -2,6 +2,7 @@ package xray
 
 import (
 	"context"
+	"sort"
 	"sync"
 	"time"
 
@@ -60,9 +61,6 @@ func (s *wrappedStream) Read(p []byte) (int, error) {
 	n, err := s.Stream.Read(p)
 	if n > 0 {
 		s.emitChunk(DirectionIn, p[:n])
-		if s.decoder != nil {
-			s.worker.send(s, DirectionIn, p[:n])
-		}
 	}
 	return n, err
 }
@@ -71,13 +69,13 @@ func (s *wrappedStream) Write(p []byte) (int, error) {
 	n, err := s.Stream.Write(p)
 	if n > 0 {
 		s.emitChunk(DirectionOut, p[:n])
-		if s.decoder != nil {
-			s.worker.send(s, DirectionOut, p[:n])
-		}
 	}
 	return n, err
 }
 
+// emitChunk copies the bytes once and shares the copy between the Envelope
+// payload (frozen once Emit dispatches) and the async decode worker. The
+// envelope is read-only after Emit returns; the worker only reads.
 func (s *wrappedStream) emitChunk(dir Direction, data []byte) {
 	cp := make([]byte, len(data))
 	copy(cp, data)
@@ -90,6 +88,9 @@ func (s *wrappedStream) emitChunk(dir Direction, data []byte) {
 			},
 		},
 	})
+	if s.decoder != nil {
+		s.worker.sendShared(s, dir, cp)
+	}
 }
 
 func (s *wrappedStream) Close() error {
@@ -215,8 +216,9 @@ func (n *wrappedNetwork) removeStream(streamID uint32) {
 	n.mu.Unlock()
 }
 
-// snapshot returns the current state as ingest envelope payloads, suitable for
-// replaying to a new sink to bring it up to date.
+// snapshot returns the current state as ingest envelope payloads, sorted by
+// alias so replays are byte-stable across runs (file-based golden tests, debug
+// diffs). Suitable for bringing a fresh consumer up to date.
 func (n *wrappedNetwork) snapshot() ([]*wiretappb.PeerUpsert, []*wiretappb.ConnectionUpsert, []*wiretappb.StreamUpsert) {
 	n.mu.RLock()
 	defer n.mu.RUnlock()
@@ -225,14 +227,20 @@ func (n *wrappedNetwork) snapshot() ([]*wiretappb.PeerUpsert, []*wiretappb.Conne
 	for _, p := range n.peers {
 		peers = append(peers, n.peerUpsertFor(p.alias, p.peerID))
 	}
+	sort.Slice(peers, func(i, j int) bool { return peers[i].PeerAlias < peers[j].PeerAlias })
+
 	connections := make([]*wiretappb.ConnectionUpsert, 0, len(n.connectionUpserts))
 	for _, c := range n.connectionUpserts {
 		connections = append(connections, c)
 	}
+	sort.Slice(connections, func(i, j int) bool { return connections[i].ConnAlias < connections[j].ConnAlias })
+
 	streams := make([]*wiretappb.StreamUpsert, 0, len(n.streamUpserts))
 	for _, s := range n.streamUpserts {
 		streams = append(streams, s)
 	}
+	sort.Slice(streams, func(i, j int) bool { return streams[i].StreamAlias < streams[j].StreamAlias })
+
 	return peers, connections, streams
 }
 

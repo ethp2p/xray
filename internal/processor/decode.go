@@ -3,7 +3,6 @@ package processor
 import (
 	"github.com/ethp2p/xray"
 	"github.com/ethp2p/xray/internal/eth"
-	gs "github.com/ethp2p/xray/internal/gossipsub"
 )
 
 type Tag struct {
@@ -66,6 +65,6 @@ func instrumentEmitAdapter(emit EmitFunc) xray.EmitFunc {
 }
 
 const (
-	tagTopic       = gs.TagTopic
-	tagMessageKind = gs.TagMessageKind
+	tagTopic       = xray.TagTopic
+	tagMessageKind = xray.TagMessageKind
 )

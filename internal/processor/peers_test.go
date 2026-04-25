@@ -1,16 +1,22 @@
 package processor
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/ethp2p/xray/api"
+)
 
 func TestPeerMapAddAndRemove(t *testing.T) {
 	pm := NewPeerMap()
 
 	pm.UpsertPeer(1, []byte("peer-abc"))
 	pm.UpsertConnection(1, ConnState{
-		PeerAlias:  1,
-		RemoteAddr: "/ip4/1.2.3.4/tcp/9000",
-		Direction:  "inbound",
-		OpenedAtNs: 1000,
+		PeerAlias: 1,
+		ConnState: api.ConnState{
+			RemoteAddr: "/ip4/1.2.3.4/tcp/9000",
+			Direction:  "inbound",
+			OpenedAtNs: 1000,
+		},
 	})
 
 	peers := pm.ListPeers()
@@ -31,8 +37,8 @@ func TestPeerMapAddAndRemove(t *testing.T) {
 func TestPeerMapMultipleConnections(t *testing.T) {
 	pm := NewPeerMap()
 	pm.UpsertPeer(1, []byte("peer-abc"))
-	pm.UpsertConnection(10, ConnState{PeerAlias: 1, RemoteAddr: "addr1", OpenedAtNs: 1000})
-	pm.UpsertConnection(11, ConnState{PeerAlias: 1, RemoteAddr: "addr2", OpenedAtNs: 2000})
+	pm.UpsertConnection(10, ConnState{PeerAlias: 1, ConnState: api.ConnState{RemoteAddr: "addr1", OpenedAtNs: 1000}})
+	pm.UpsertConnection(11, ConnState{PeerAlias: 1, ConnState: api.ConnState{RemoteAddr: "addr2", OpenedAtNs: 2000}})
 
 	peers := pm.ListPeers()
 	if len(peers[0].Connections) != 2 {
@@ -52,7 +58,7 @@ func TestPeerMapMultipleConnections(t *testing.T) {
 func TestPeerMapClear(t *testing.T) {
 	pm := NewPeerMap()
 	pm.UpsertPeer(1, []byte("peer-abc"))
-	pm.UpsertConnection(1, ConnState{PeerAlias: 1, RemoteAddr: "addr1", OpenedAtNs: 1000})
+	pm.UpsertConnection(1, ConnState{PeerAlias: 1, ConnState: api.ConnState{RemoteAddr: "addr1", OpenedAtNs: 1000}})
 	pm.Clear()
 	if pm.Count() != 0 {
 		t.Fatalf("expected 0 peers after clear, got %d", pm.Count())

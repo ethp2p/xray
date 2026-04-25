@@ -20,7 +20,3 @@ type FinalizedSlot struct {
 	SourceID string
 	Detail   SlotDetail
 }
-
-// wsMessage is the internal representation matching api.WsMessage. We keep it
-// here so the server package can build it without importing api directly.
-type wsMessage = api.WsMessage

@@ -1,6 +1,7 @@
 package xray
 
 import (
+	"crypto/rand"
 	"errors"
 	"net"
 	"sync"
@@ -47,7 +48,7 @@ func NewSinkIngest(address string, emitter *Emitter, clientName string, localPee
 		address:       address,
 		localPeerID:   append([]byte(nil), localPeerID...),
 		clientName:    clientName,
-		bootID:        []byte(time.Now().UTC().Format(time.RFC3339Nano)),
+		bootID:        randomBootID(),
 		startedAtNs:   time.Now().UnixNano(),
 		waitForAttach: waitForAttach,
 		sendCh:        make(chan *wiretappb.Envelope, 1024),
@@ -219,4 +220,20 @@ func (s *SinkIngest) drainSendCh() {
 			return
 		}
 	}
+}
+
+// randomBootID returns 16 random bytes that change on each process start.
+// The backend uses bootID to detect probe restarts; an opaque random ID is
+// safer than a timestamp string (no parse format, no ns-collision risk).
+func randomBootID() []byte {
+	id := make([]byte, 16)
+	if _, err := rand.Read(id); err != nil {
+		// crypto/rand should never fail on a healthy system; fall back to a
+		// time-derived value so the probe still has *some* unique identifier.
+		nano := time.Now().UnixNano()
+		for i := range id {
+			id[i] = byte(nano >> (i % 8 * 8))
+		}
+	}
+	return id
 }

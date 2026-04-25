@@ -6,17 +6,12 @@ import (
 	"github.com/ethp2p/xray/api"
 )
 
-// ConnState mirrors api.ConnState for internal mutation. PeerAlias is internal
-// (json:"-") and not part of the public contract.
+// ConnState extends api.ConnState with the internal PeerAlias used to look up
+// the owning peer. Embedding lets ListPeers project to the public type with a
+// single field reference instead of a manual copy.
 type ConnState struct {
-	PeerAlias  uint64 `json:"-"`
-	RemoteAddr string `json:"remote_addr"`
-	LocalAddr  string `json:"local_addr,omitempty"`
-	Direction  string `json:"direction"`
-	Transport  string `json:"transport,omitempty"`
-	Security   string `json:"security,omitempty"`
-	Muxer      string `json:"muxer,omitempty"`
-	OpenedAtNs int64  `json:"opened_at_ns"`
+	api.ConnState
+	PeerAlias uint64 `json:"-"`
 }
 
 // PeerSummary aliases api.PeerSummary for the JSON response.
@@ -101,15 +96,7 @@ func (m *PeerMap) ListPeers() []PeerSummary {
 			LastSeenNs:  ps.LastSeenNs,
 		}
 		for _, conn := range ps.Connections {
-			summary.Connections = append(summary.Connections, api.ConnState{
-				RemoteAddr: conn.RemoteAddr,
-				LocalAddr:  conn.LocalAddr,
-				Direction:  conn.Direction,
-				Transport:  conn.Transport,
-				Security:   conn.Security,
-				Muxer:      conn.Muxer,
-				OpenedAtNs: conn.OpenedAtNs,
-			})
+			summary.Connections = append(summary.Connections, conn.ConnState)
 		}
 		result = append(result, summary)
 	}

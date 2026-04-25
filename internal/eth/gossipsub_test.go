@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/ethp2p/xray"
-	gossipsub "github.com/ethp2p/xray/internal/gossipsub"
 	"github.com/gogo/protobuf/proto"
 	pubsubpb "github.com/libp2p/go-libp2p-pubsub/pb"
 )
@@ -103,8 +102,8 @@ func TestGossipSubDecoder_PublishEmit(t *testing.T) {
 		t.Errorf("topic = %v, want [beacon_block]", got)
 	}
 	// Payload too short — no slot tag.
-	if pub.tags[TagDecodedSlot] != nil {
-		t.Errorf("unexpected slot tag: %v", pub.tags[TagDecodedSlot])
+	if pub.tags[xray.TagDecodedSlot] != nil {
+		t.Errorf("unexpected slot tag: %v", pub.tags[xray.TagDecodedSlot])
 	}
 }
 
@@ -154,7 +153,7 @@ func TestGossipSubDecoder_FramingEmit(t *testing.T) {
 	// Framing emit carries only TagFraming; there must be at least one.
 	var found bool
 	for _, a := range actions {
-		if _, ok := a.tags[gossipsub.TagFraming]; ok {
+		if _, ok := a.tags[xray.TagFraming]; ok {
 			found = true
 			break
 		}

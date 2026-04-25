@@ -61,22 +61,22 @@ func (e *Emitter) NextStreamID() uint32 {
 }
 
 // Emit assigns a sequence number and observed-at timestamp, adds the envelope
-// to the ring buffer, and fans out to all sinks.
+// to the ring buffer, and fans out to all sinks. Sink writes happen after the
+// lock is released so a slow sink (e.g. SinkFile doing disk I/O) cannot stall
+// other producers calling Emit.
 func (e *Emitter) Emit(env *wiretappb.Envelope) {
 	e.mu.Lock()
-	defer e.mu.Unlock()
-
 	if e.closed {
+		e.mu.Unlock()
 		return
 	}
-
 	env.Seq = e.nextSeq
 	e.nextSeq++
 	env.ObservedAtNs = time.Now().UnixNano()
-
 	e.addToBufferLocked(env)
-
 	sinks := e.snapshotSinks()
+	e.mu.Unlock()
+
 	for _, sink := range sinks {
 		sink.Write(env)
 	}

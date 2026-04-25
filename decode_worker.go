@@ -72,13 +72,13 @@ func (w *decodeWorker) process(chunk decodeChunk) {
 	}
 }
 
-// send copies data and enqueues it for async decoding. Drops silently if the
-// channel is full — bytes are already counted on the hot path.
-func (w *decodeWorker) send(s *wrappedStream, dir Direction, data []byte) {
-	cp := make([]byte, len(data))
-	copy(cp, data)
+// sendShared enqueues data for async decoding without copying. The caller must
+// guarantee the slice is not mutated after this call (e.g. it was just allocated
+// for the matching envelope and is not reused). Drops silently if the channel
+// is full.
+func (w *decodeWorker) sendShared(s *wrappedStream, dir Direction, data []byte) {
 	select {
-	case w.ch <- decodeChunk{stream: s, dir: dir, data: cp}:
+	case w.ch <- decodeChunk{stream: s, dir: dir, data: data}:
 	default:
 	}
 }

@@ -15,14 +15,6 @@ import (
 // DefaultMaxRPCSize matches pubsub.DefaultMaxMessageSize (1 MiB).
 const DefaultMaxRPCSize = 1 << 20
 
-// Tag names populated by the decoder. Re-exported from the public xray package
-// so the SDK exposes a single set of constants.
-const (
-	TagTopic       = xray.TagTopic
-	TagMessageKind = xray.TagMessageKind
-	TagFraming     = xray.TagFraming
-)
-
 // MessageDecoder processes an application-level payload within a gossipsub publish message.
 // It receives the raw *pb.Message and may mutate tags to add or replace entries.
 type MessageDecoder func(msg *pb.Message, tags map[string][]string)
@@ -131,7 +123,7 @@ func (v *bufferingRPC) observe(msgDecoder MessageDecoder, data []byte, emit xray
 
 		// Framing bytes: varint prefix + proto field encoding overhead in the RPC envelope.
 		if framing := totalLen - innerBytes; framing > 0 {
-			emit(framing, []xray.Tag{{Name: TagFraming}}, nil)
+			emit(framing, []xray.Tag{{Name: xray.TagFraming}}, nil)
 		}
 
 		v.buf = v.buf[totalLen:]
@@ -157,10 +149,10 @@ func emitActions(rpc *pb.RPC, msgDecoder MessageDecoder, emit xray.EmitFunc) int
 		size := msg.Size()
 		inner += size
 		tags := map[string][]string{
-			TagMessageKind: {"PUBLISH"},
+			xray.TagMessageKind: {"PUBLISH"},
 		}
 		if msg.Topic != nil {
-			tags[TagTopic] = []string{*msg.Topic}
+			tags[xray.TagTopic] = []string{*msg.Topic}
 		}
 		if msgDecoder != nil {
 			msgDecoder(msg, tags)
@@ -175,7 +167,7 @@ func emitActions(rpc *pb.RPC, msgDecoder MessageDecoder, emit xray.EmitFunc) int
 		for _, iwant := range ctrl.Iwant {
 			size := iwant.Size()
 			inner += size
-			emit(size, []xray.Tag{{Name: TagMessageKind, Values: []string{"IWANT"}}}, iwant)
+			emit(size, []xray.Tag{{Name: xray.TagMessageKind, Values: []string{"IWANT"}}}, iwant)
 		}
 		for _, graft := range ctrl.Graft {
 			inner += emitTopicControl(graft.Size(), "GRAFT", graft.TopicID, graft, emit)
@@ -186,7 +178,7 @@ func emitActions(rpc *pb.RPC, msgDecoder MessageDecoder, emit xray.EmitFunc) int
 		for _, idw := range ctrl.Idontwant {
 			size := idw.Size()
 			inner += size
-			emit(size, []xray.Tag{{Name: TagMessageKind, Values: []string{"IDONTWANT"}}}, idw)
+			emit(size, []xray.Tag{{Name: xray.TagMessageKind, Values: []string{"IDONTWANT"}}}, idw)
 		}
 	}
 
@@ -198,9 +190,9 @@ func emitActions(rpc *pb.RPC, msgDecoder MessageDecoder, emit xray.EmitFunc) int
 // without an intermediate map since control messages are not mutated before emit.
 func emitTopicControl(size int, kind string, topicID *string, parsed any, emit xray.EmitFunc) int {
 	tags := make([]xray.Tag, 1, 2)
-	tags[0] = xray.Tag{Name: TagMessageKind, Values: []string{kind}}
+	tags[0] = xray.Tag{Name: xray.TagMessageKind, Values: []string{kind}}
 	if topicID != nil {
-		tags = append(tags, xray.Tag{Name: TagTopic, Values: []string{*topicID}})
+		tags = append(tags, xray.Tag{Name: xray.TagTopic, Values: []string{*topicID}})
 	}
 	emit(size, tags, parsed)
 	return size

@@ -186,9 +186,6 @@ func Wiretap(h host.Host, opts ...Option) (*Host, error) {
 type notifiee struct {
 	emitter *Emitter
 	net     *wrappedNetwork
-
-	mu       sync.Mutex
-	openedAt map[uint32]int64
 }
 
 var _ network.Notifiee = (*notifiee)(nil)
@@ -203,13 +200,6 @@ func (n *notifiee) Connected(_ network.Network, conn network.Conn) {
 	if !created {
 		return
 	}
-	n.mu.Lock()
-	if n.openedAt == nil {
-		n.openedAt = make(map[uint32]int64)
-	}
-	n.openedAt[wc.connID] = openedAt
-	n.mu.Unlock()
-
 	n.emitter.Emit(&wiretappb.Envelope{
 		Payload: &wiretappb.Envelope_PeerUpsert{
 			PeerUpsert: n.net.peerUpsertFor(wc.peerAlias, conn.RemotePeer()),
@@ -227,16 +217,12 @@ func (n *notifiee) Disconnected(_ network.Network, conn network.Conn) {
 	if wc == nil {
 		return
 	}
-	closedAt := time.Now().UnixNano()
 	n.emitter.Emit(&wiretappb.Envelope{
 		Payload: &wiretappb.Envelope_ConnectionClosed{
 			ConnectionClosed: &wiretappb.ConnectionClosed{
 				ConnAlias:  uint64(wc.connID),
-				ClosedAtNs: closedAt,
+				ClosedAtNs: time.Now().UnixNano(),
 			},
 		},
 	})
-	n.mu.Lock()
-	delete(n.openedAt, wc.connID)
-	n.mu.Unlock()
 }
