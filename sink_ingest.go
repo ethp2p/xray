@@ -1,4 +1,4 @@
-package probe
+package xray
 
 import (
 	"errors"
@@ -27,13 +27,13 @@ type SinkIngest struct {
 
 	emitter *Emitter
 
-	address     string
-	localPeerID []byte
-	clientName  string
-	bootID      []byte
-	startedAtNs int64
+	address       string
+	localPeerID   []byte
+	clientName    string
+	bootID        []byte
+	startedAtNs   int64
 	waitForAttach bool
-	sourceID    string // assigned by backend
+	sourceID      string // assigned by backend
 
 	conn           net.Conn
 	sendCh         chan *ingestpb.Envelope
@@ -358,4 +358,3 @@ func directionToIngest(d Direction) ingestpb.Direction {
 		return ingestpb.Direction_DIRECTION_UNKNOWN
 	}
 }
-

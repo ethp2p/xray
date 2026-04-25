@@ -14,7 +14,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-msgio/protoio"
 
-	"github.com/ethp2p/xray/probe"
+	"github.com/ethp2p/xray"
 	"github.com/ethp2p/xray/gossipsub"
 	pb "github.com/ethp2p/xray/proto"
 	pspb "github.com/libp2p/go-libp2p-pubsub/pb"
@@ -229,10 +229,10 @@ func TestGossipSub_DecoderFallback(t *testing.T) {
 
 	sink1 := newTestSink()
 	tagCollector := newTagCollector()
-	host1, err := probe.Wrap(baseHost1,
-		probe.WithDecoder(gossipsub.Decoder{}.Match, gossipsub.Decoder{}.New),
-		probe.WithOnMessage(tagCollector.Factory()),
-		probe.WithSink(sink1),
+	host1, err := xray.Wrap(baseHost1,
+		xray.WithDecoder(gossipsub.Decoder{}.Match, gossipsub.Decoder{}.New),
+		xray.WithOnMessage(tagCollector.Factory()),
+		xray.WithSink(sink1),
 	)
 	if err != nil {
 		t.Fatalf("failed to wrap host1: %v", err)
@@ -240,10 +240,10 @@ func TestGossipSub_DecoderFallback(t *testing.T) {
 	defer host1.Close()
 
 	sink2 := newTestSink()
-	host2, err := probe.Wrap(baseHost2,
-		probe.WithDecoder(gossipsub.Decoder{}.Match, gossipsub.Decoder{}.New),
-		probe.WithOnMessage(tagCollector.Factory()),
-		probe.WithSink(sink2),
+	host2, err := xray.Wrap(baseHost2,
+		xray.WithDecoder(gossipsub.Decoder{}.Match, gossipsub.Decoder{}.New),
+		xray.WithOnMessage(tagCollector.Factory()),
+		xray.WithSink(sink2),
 	)
 	if err != nil {
 		t.Fatalf("failed to wrap host2: %v", err)
@@ -319,10 +319,10 @@ func TestGossipSub_ManualProtocolTraffic(t *testing.T) {
 
 	sink1 := newTestSink()
 	tagCollector := newTagCollector()
-	host1, err := probe.Wrap(baseHost1,
-		probe.WithDecoder(gossipsub.Decoder{}.Match, gossipsub.Decoder{}.New),
-		probe.WithOnMessage(tagCollector.Factory()),
-		probe.WithSink(sink1),
+	host1, err := xray.Wrap(baseHost1,
+		xray.WithDecoder(gossipsub.Decoder{}.Match, gossipsub.Decoder{}.New),
+		xray.WithOnMessage(tagCollector.Factory()),
+		xray.WithSink(sink1),
 	)
 	if err != nil {
 		t.Fatalf("failed to wrap host1: %v", err)
@@ -330,10 +330,10 @@ func TestGossipSub_ManualProtocolTraffic(t *testing.T) {
 	defer host1.Close()
 
 	sink2 := newTestSink()
-	host2, err := probe.Wrap(baseHost2,
-		probe.WithDecoder(gossipsub.Decoder{}.Match, gossipsub.Decoder{}.New),
-		probe.WithOnMessage(tagCollector.Factory()),
-		probe.WithSink(sink2),
+	host2, err := xray.Wrap(baseHost2,
+		xray.WithDecoder(gossipsub.Decoder{}.Match, gossipsub.Decoder{}.New),
+		xray.WithOnMessage(tagCollector.Factory()),
+		xray.WithSink(sink2),
 	)
 	if err != nil {
 		t.Fatalf("failed to wrap host2: %v", err)
@@ -405,9 +405,9 @@ func newTagCollector() *tagCollector {
 	return &tagCollector{topics: make(map[string]struct{})}
 }
 
-func (tc *tagCollector) Factory() probe.OnMessageFactory {
-	return func(streamID uint32, protocol string) probe.OnMessage {
-		return func(msg probe.DecodedMessage) {
+func (tc *tagCollector) Factory() xray.OnMessageFactory {
+	return func(streamID uint32, protocol string) xray.OnMessage {
+		return func(msg xray.DecodedMessage) {
 			tc.mu.Lock()
 			defer tc.mu.Unlock()
 			for _, tag := range msg.Tags {
@@ -475,7 +475,7 @@ func (s *testSink) Strings() map[uint32]string {
 	return result
 }
 
-func setupTwoHostsWithPubsub(t *testing.T, ctx context.Context, tc *tagCollector) (*probe.Host, *probe.Host, *testSink, *testSink) {
+func setupTwoHostsWithPubsub(t *testing.T, ctx context.Context, tc *tagCollector) (*xray.Host, *xray.Host, *testSink, *testSink) {
 	baseHost1, err := libp2p.New(libp2p.ResourceManager(&network.NullResourceManager{}))
 	if err != nil {
 		t.Fatalf("failed to create base host1: %v", err)
@@ -487,10 +487,10 @@ func setupTwoHostsWithPubsub(t *testing.T, ctx context.Context, tc *tagCollector
 	}
 
 	sink1 := newTestSink()
-	host1, err := probe.Wrap(baseHost1,
-		probe.WithDecoder(gossipsub.Decoder{}.Match, gossipsub.Decoder{}.New),
-		probe.WithOnMessage(tc.Factory()),
-		probe.WithSink(sink1),
+	host1, err := xray.Wrap(baseHost1,
+		xray.WithDecoder(gossipsub.Decoder{}.Match, gossipsub.Decoder{}.New),
+		xray.WithOnMessage(tc.Factory()),
+		xray.WithSink(sink1),
 	)
 	if err != nil {
 		baseHost1.Close()
@@ -499,10 +499,10 @@ func setupTwoHostsWithPubsub(t *testing.T, ctx context.Context, tc *tagCollector
 	}
 
 	sink2 := newTestSink()
-	host2, err := probe.Wrap(baseHost2,
-		probe.WithDecoder(gossipsub.Decoder{}.Match, gossipsub.Decoder{}.New),
-		probe.WithOnMessage(tc.Factory()),
-		probe.WithSink(sink2),
+	host2, err := xray.Wrap(baseHost2,
+		xray.WithDecoder(gossipsub.Decoder{}.Match, gossipsub.Decoder{}.New),
+		xray.WithOnMessage(tc.Factory()),
+		xray.WithSink(sink2),
 	)
 	if err != nil {
 		host1.Close()

@@ -1,4 +1,4 @@
-package probe
+package xray
 
 import (
 	"context"
@@ -122,7 +122,7 @@ func (s *wrappedStream) Reset() error {
 type wrappedNetwork struct {
 	network.Network
 	emitter    *Emitter
-	strings    *StringInterner
+	strings    *stringInterner
 	worker     *decodeWorker
 	initDecode func(streamID uint32, protocol string) (StreamDecoder, []OnMessage)
 	ingestSink *SinkIngest

@@ -1,4 +1,4 @@
-package probe
+package xray
 
 import (
 	"sync"
@@ -6,25 +6,25 @@ import (
 	pb "github.com/ethp2p/xray/proto"
 )
 
-// StringInterner assigns compact sequential IDs to strings for wire efficiency.
+// stringInterner assigns compact sequential IDs to strings for wire efficiency.
 // It uses a RWMutex so the common "already interned" path (after warmup) is
 // non-exclusive across concurrent callers.
-type StringInterner struct {
+type stringInterner struct {
 	mu        sync.RWMutex
 	strings   []string
 	stringIDs map[string]uint32
 	emitter   *Emitter
 }
 
-func newStringInterner(emitter *Emitter) *StringInterner {
-	return &StringInterner{
+func newStringInterner(emitter *Emitter) *stringInterner {
+	return &stringInterner{
 		stringIDs: make(map[string]uint32),
 		emitter:   emitter,
 	}
 }
 
 // Intern returns the ID for a string, emitting a StringDef event if new.
-func (si *StringInterner) Intern(s string) uint32 {
+func (si *stringInterner) Intern(s string) uint32 {
 	// Fast path: already interned.
 	si.mu.RLock()
 	if id, ok := si.stringIDs[s]; ok {
@@ -57,7 +57,7 @@ func (si *StringInterner) Intern(s string) uint32 {
 
 // snapshot returns a copy of all interned strings. Must be called externally
 // synchronized if consistency with other state is needed.
-func (si *StringInterner) snapshot() []string {
+func (si *stringInterner) snapshot() []string {
 	si.mu.RLock()
 	defer si.mu.RUnlock()
 	out := make([]string, len(si.strings))

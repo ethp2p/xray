@@ -1,4 +1,4 @@
-package probe
+package xray
 
 import "time"
 
@@ -56,11 +56,6 @@ func WithIngestAddr(addr string) Option {
 	return func(c *config) {
 		c.ingestAddr = addr
 	}
-}
-
-// WithUnixSocket is an alias for WithIngestAddr for backward compatibility.
-func WithUnixSocket(addr string) Option {
-	return WithIngestAddr(addr)
 }
 
 // WithClientName sets the client name sent in the ClientHello handshake.

@@ -1,4 +1,4 @@
-package probe
+package xray
 
 import (
 	"sync"
@@ -27,7 +27,7 @@ type Emitter struct {
 	closed bool
 
 	// Collaborators set after construction.
-	strings    *StringInterner
+	strings    *stringInterner
 	net        *wrappedNetwork
 	ingestSink *SinkIngest
 
@@ -212,7 +212,7 @@ func fanOut(sinks []Sink, event *pb.TraceEvent) {
 }
 
 // Strings returns the string interner.
-func (e *Emitter) Strings() *StringInterner {
+func (e *Emitter) Strings() *stringInterner {
 	return e.strings
 }
 

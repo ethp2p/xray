@@ -147,4 +147,3 @@ func (l *IngestListener) handleConnection(conn net.Conn) {
 		l.processor.ApplyForSource(sourceID, env)
 	}
 }
-

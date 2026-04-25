@@ -34,27 +34,27 @@ type SlotBucketPoint struct {
 }
 
 type BucketBreakdown struct {
-	Protocol        string                      `json:"protocol"`
-	Topic           string                      `json:"topic"`
-	MessageKind     string                      `json:"message_kind"`
-	BytesIn         uint64                      `json:"bytes_in"`
-	BytesOut        uint64                      `json:"bytes_out"`
-	MsgCount        uint64                      `json:"msg_count"`
-	BleedBytesIn    uint64                      `json:"bleed_bytes_in"`
-	BleedBytesOut   uint64                      `json:"bleed_bytes_out"`
-	BleedByDistance map[string]BleedDistEntry   `json:"bleed_by_distance,omitempty"`
+	Protocol        string                    `json:"protocol"`
+	Topic           string                    `json:"topic"`
+	MessageKind     string                    `json:"message_kind"`
+	BytesIn         uint64                    `json:"bytes_in"`
+	BytesOut        uint64                    `json:"bytes_out"`
+	MsgCount        uint64                    `json:"msg_count"`
+	BleedBytesIn    uint64                    `json:"bleed_bytes_in"`
+	BleedBytesOut   uint64                    `json:"bleed_bytes_out"`
+	BleedByDistance map[string]BleedDistEntry `json:"bleed_by_distance,omitempty"`
 }
 
 type SlotBreakdown struct {
-	Protocol        string                      `json:"protocol"`
-	Topic           string                      `json:"topic"`
-	MessageKind     string                      `json:"message_kind"`
-	BytesIn         uint64                      `json:"bytes_in"`
-	BytesOut        uint64                      `json:"bytes_out"`
-	MsgCount        uint64                      `json:"msg_count"`
-	BleedBytesIn    uint64                      `json:"bleed_bytes_in"`
-	BleedBytesOut   uint64                      `json:"bleed_bytes_out"`
-	BleedByDistance map[string]BleedDistEntry   `json:"bleed_by_distance,omitempty"`
+	Protocol        string                    `json:"protocol"`
+	Topic           string                    `json:"topic"`
+	MessageKind     string                    `json:"message_kind"`
+	BytesIn         uint64                    `json:"bytes_in"`
+	BytesOut        uint64                    `json:"bytes_out"`
+	MsgCount        uint64                    `json:"msg_count"`
+	BleedBytesIn    uint64                    `json:"bleed_bytes_in"`
+	BleedBytesOut   uint64                    `json:"bleed_bytes_out"`
+	BleedByDistance map[string]BleedDistEntry `json:"bleed_by_distance,omitempty"`
 }
 
 type SlotDetail struct {
@@ -76,4 +76,3 @@ type FinalizedSlot struct {
 	SourceID string
 	Detail   SlotDetail
 }
-

@@ -14,7 +14,7 @@ Wiretap wraps any `go-libp2p` host to capture stream-level traffic without modif
 │                  (Prysm, Lighthouse, etc.)                    │
 │                                                               │
 │  ┌─────────────────────────────────────────────────────────┐ │
-│  │                    Probe (probe/)                        │ │
+│  │                    Wiretap (xray module root)            │ │
 │  │  Wraps go-libp2p Host, intercepts streams/connections    │ │
 │  │  Forwards raw bytes via ingest protocol                  │ │
 │  └──────────────────────┬──────────────────────────────────┘ │
@@ -77,12 +77,12 @@ Open `http://localhost:5173`. Vite proxies API requests to the backend on `:9100
 ### Integrate with Prysm
 
 ```go
-import "github.com/ethp2p/xray/probe"
+import "github.com/ethp2p/xray"
 
-ih, err := probe.Wrap(h,
-    probe.WithIngestAddr("/tmp/xray.sock"),
-    probe.WithClientName("prysm"),
-    probe.WithWaitForAttach(),
+ih, err := xray.Wiretap(h,
+    xray.WithIngestAddr("/tmp/xray.sock"),
+    xray.WithClientName("prysm"),
+    xray.WithWaitForAttach(),
 )
 ```
 
@@ -91,7 +91,7 @@ Prysm's fork supports this via `--instrument-socket` and `--instrument-file` fla
 ## Project structure
 
 ```
-probe/                  Library clients import (host wrapper, sinks, emitter)
+*.go                    Wiretap producer SDK (host wrapper, sinks, emitter) at module root
 eth/                    Ethereum: slot clock, SSZ extraction, gossipsub decoder
 gossipsub/              Gossipsub RPC parser (varint framing, action atomization)
 backend/                Per-slot aggregation, REST/WS API, processor, storage
@@ -109,17 +109,17 @@ docs/                   Specs and plans
 The probe wraps a `go-libp2p` host transparently:
 
 ```go
-import "github.com/ethp2p/xray/probe"
+import "github.com/ethp2p/xray"
 
 host, _ := libp2p.New(...)
-ih, err := probe.Wrap(host,
-    probe.WithIngestAddr("/tmp/xray.sock"),
-    probe.WithClientName("my-client/v1.0"),
-    probe.WithWaitForAttach(),                    // block until backend connects
-    probe.WithSinkFile("/var/log/xray.trace"), // optional local trace file
-    probe.WithDecoder(gossipsub.Decoder{}.Match, gossipsub.Decoder{}.New),
-    probe.WithOnMessage(func(streamID uint32, protocol string) probe.OnMessage {
-        return func(msg probe.DecodedMessage) {
+ih, err := xray.Wiretap(host,
+    xray.WithIngestAddr("/tmp/xray.sock"),
+    xray.WithClientName("my-client/v1.0"),
+    xray.WithWaitForAttach(),                    // block until backend connects
+    xray.WithSinkFile("/var/log/xray.trace"),    // optional local trace file
+    xray.WithDecoder(gossipsub.Decoder{}.Match, gossipsub.Decoder{}.New),
+    xray.WithOnMessage(func(streamID uint32, protocol string) xray.OnMessage {
+        return func(msg xray.DecodedMessage) {
             // handle decoded messages off the hot path
         }
     }),
@@ -127,7 +127,7 @@ ih, err := probe.Wrap(host,
 defer ih.Close()
 ```
 
-`probe.Wrap` returns a `*probe.Host` that satisfies `host.Host`. Existing code works unchanged; all stream reads/writes are intercepted and forwarded.
+`xray.Wiretap` returns a `*xray.Host` that satisfies `host.Host`. Existing code works unchanged; all stream reads/writes are intercepted and forwarded.
 
 ## Configuration
 

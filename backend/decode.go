@@ -1,7 +1,7 @@
 package backend
 
 import (
-	"github.com/ethp2p/xray/probe"
+	"github.com/ethp2p/xray"
 	"github.com/ethp2p/xray/eth"
 	gs "github.com/ethp2p/xray/gossipsub"
 )
@@ -37,7 +37,7 @@ func tagValue(tags []Tag, name string) string {
 }
 
 type wrappedDecoder struct {
-	inner probe.StreamDecoder
+	inner xray.StreamDecoder
 }
 
 func (d wrappedDecoder) ObserveRead(data []byte, emit EmitFunc) error {
@@ -52,8 +52,8 @@ func (d wrappedDecoder) Reset() {
 	d.inner.Reset()
 }
 
-func instrumentEmitAdapter(emit EmitFunc) probe.EmitFunc {
-	return func(wireBytes int, tags []probe.Tag, parsed any) {
+func instrumentEmitAdapter(emit EmitFunc) xray.EmitFunc {
+	return func(wireBytes int, tags []xray.Tag, parsed any) {
 		converted := make([]Tag, 0, len(tags))
 		for _, tag := range tags {
 			converted = append(converted, Tag{

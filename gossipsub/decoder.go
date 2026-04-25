@@ -7,7 +7,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 
-	"github.com/ethp2p/xray/probe"
+	"github.com/ethp2p/xray"
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 )
@@ -44,7 +44,7 @@ func (d Decoder) Match(protocol string) bool {
 }
 
 // New returns a per-stream decoder instance.
-func (d Decoder) New() probe.StreamDecoder {
+func (d Decoder) New() xray.StreamDecoder {
 	max := d.MaxRPCSize
 	if max == 0 {
 		max = DefaultMaxRPCSize
@@ -62,11 +62,11 @@ type instance struct {
 	msgDecoder MessageDecoder
 }
 
-func (i *instance) ObserveRead(data []byte, emit probe.EmitFunc) error {
+func (i *instance) ObserveRead(data []byte, emit xray.EmitFunc) error {
 	return i.in.observe(i.msgDecoder, data, emit)
 }
 
-func (i *instance) ObserveWrite(data []byte, emit probe.EmitFunc) error {
+func (i *instance) ObserveWrite(data []byte, emit xray.EmitFunc) error {
 	return i.out.observe(i.msgDecoder, data, emit)
 }
 
@@ -94,7 +94,7 @@ func (v *bufferingRPC) reset() {
 	v.buf = v.buf[:0]
 }
 
-func (v *bufferingRPC) observe(msgDecoder MessageDecoder, data []byte, emit probe.EmitFunc) error {
+func (v *bufferingRPC) observe(msgDecoder MessageDecoder, data []byte, emit xray.EmitFunc) error {
 	v.buf = append(v.buf, data...)
 
 	for {
@@ -130,7 +130,7 @@ func (v *bufferingRPC) observe(msgDecoder MessageDecoder, data []byte, emit prob
 
 		// Framing bytes: varint prefix + proto field encoding overhead in the RPC envelope.
 		if framing := totalLen - innerBytes; framing > 0 {
-			emit(framing, []probe.Tag{{Name: TagFraming}}, nil)
+			emit(framing, []xray.Tag{{Name: TagFraming}}, nil)
 		}
 
 		v.buf = v.buf[totalLen:]
@@ -141,7 +141,7 @@ func (v *bufferingRPC) observe(msgDecoder MessageDecoder, data []byte, emit prob
 
 // emitActions atomises a single RPC into one emit per logical action and returns
 // the total number of bytes attributed to inner messages.
-func emitActions(rpc *pb.RPC, msgDecoder MessageDecoder, emit probe.EmitFunc) int {
+func emitActions(rpc *pb.RPC, msgDecoder MessageDecoder, emit xray.EmitFunc) int {
 	inner := 0
 
 	for _, sub := range rpc.Subscriptions {
@@ -174,7 +174,7 @@ func emitActions(rpc *pb.RPC, msgDecoder MessageDecoder, emit probe.EmitFunc) in
 		for _, iwant := range ctrl.Iwant {
 			size := iwant.Size()
 			inner += size
-			emit(size, []probe.Tag{{Name: TagMessageKind, Values: []string{"IWANT"}}}, iwant)
+			emit(size, []xray.Tag{{Name: TagMessageKind, Values: []string{"IWANT"}}}, iwant)
 		}
 		for _, graft := range ctrl.Graft {
 			inner += emitTopicControl(graft.Size(), "GRAFT", graft.TopicID, graft, emit)
@@ -185,7 +185,7 @@ func emitActions(rpc *pb.RPC, msgDecoder MessageDecoder, emit probe.EmitFunc) in
 		for _, idw := range ctrl.Idontwant {
 			size := idw.Size()
 			inner += size
-			emit(size, []probe.Tag{{Name: TagMessageKind, Values: []string{"IDONTWANT"}}}, idw)
+			emit(size, []xray.Tag{{Name: TagMessageKind, Values: []string{"IDONTWANT"}}}, idw)
 		}
 	}
 
@@ -195,20 +195,20 @@ func emitActions(rpc *pb.RPC, msgDecoder MessageDecoder, emit probe.EmitFunc) in
 // emitTopicControl emits a control action with a message_kind tag and optional topic tag.
 // Returns the size for accumulation into inner bytes. Builds the tag slice directly
 // without an intermediate map since control messages are not mutated before emit.
-func emitTopicControl(size int, kind string, topicID *string, parsed any, emit probe.EmitFunc) int {
-	tags := make([]probe.Tag, 1, 2)
-	tags[0] = probe.Tag{Name: TagMessageKind, Values: []string{kind}}
+func emitTopicControl(size int, kind string, topicID *string, parsed any, emit xray.EmitFunc) int {
+	tags := make([]xray.Tag, 1, 2)
+	tags[0] = xray.Tag{Name: TagMessageKind, Values: []string{kind}}
 	if topicID != nil {
-		tags = append(tags, probe.Tag{Name: TagTopic, Values: []string{*topicID}})
+		tags = append(tags, xray.Tag{Name: TagTopic, Values: []string{*topicID}})
 	}
 	emit(size, tags, parsed)
 	return size
 }
 
-func tagsFromMap(m map[string][]string) []probe.Tag {
-	tags := make([]probe.Tag, 0, len(m))
+func tagsFromMap(m map[string][]string) []xray.Tag {
+	tags := make([]xray.Tag, 0, len(m))
 	for name, values := range m {
-		tags = append(tags, probe.Tag{Name: name, Values: values})
+		tags = append(tags, xray.Tag{Name: name, Values: values})
 	}
 	return tags
 }
