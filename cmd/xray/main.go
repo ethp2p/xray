@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/ethp2p/xray/internal/eth"
@@ -30,7 +31,7 @@ func main() {
 	)
 	flag.Parse()
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	clock := eth.NewSlotClock(time.Unix(*genesisUnix, 0), *secondsPerSlot)
@@ -41,6 +42,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("create storage: %v", err)
 	}
+	defer func() {
+		if err := store.Close(); err != nil {
+			log.Printf("close storage: %v", err)
+		}
+	}()
 
 	metas, err := store.LoadSourceMetas()
 	if err != nil {
@@ -48,9 +54,6 @@ func main() {
 	}
 	for _, meta := range metas {
 		registry.Register(meta)
-		if err := store.LoadSummaryIndex(meta.SourceID); err != nil {
-			log.Printf("load summary index for %s: %v", meta.SourceID, err)
-		}
 	}
 
 	finalizeCh := make(chan processor.FinalizedSlot, 64)
@@ -105,9 +108,13 @@ func main() {
 	if err != nil {
 		log.Fatalf("listen failed: %v", err)
 	}
+	go func() {
+		<-ctx.Done()
+		_ = listener.Close()
+	}()
 
 	log.Printf("introspector listening on http://%s (ingest on %s)", listener.Addr().String(), *ingestAddr)
-	if err := srv.Serve(listener); err != nil {
+	if err := srv.Serve(listener); err != nil && ctx.Err() == nil {
 		log.Fatalf("server failed: %v", err)
 	}
 }

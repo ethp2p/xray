@@ -4,7 +4,8 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -o /xray ./cmd/xray
+# go-sqlite3 uses cgo for native SQLite performance.
+RUN CGO_ENABLED=1 go build -o /xray ./cmd/xray
 
 # ── Dashboard ────────────────────────────────────────────────────────
 FROM oven/bun:1 AS dashboard
@@ -15,7 +16,7 @@ COPY dashboard/ .
 RUN bun run build
 
 # ── Final image ──────────────────────────────────────────────────────
-FROM gcr.io/distroless/static-debian12
+FROM gcr.io/distroless/base-debian12
 COPY --from=backend /xray /usr/local/bin/xray
 COPY --from=dashboard /src/dist /srv/dashboard
 EXPOSE 9100

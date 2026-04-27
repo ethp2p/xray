@@ -3,7 +3,6 @@ module github.com/ethp2p/xray
 go 1.25.1
 
 require (
-	connectrpc.com/connect v1.19.1
 	github.com/ferranbt/fastssz v1.0.0
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/snappy v1.0.0
@@ -11,6 +10,7 @@ require (
 	github.com/libp2p/go-libp2p v0.39.1
 	github.com/libp2p/go-libp2p-pubsub v0.14.2
 	github.com/libp2p/go-msgio v0.3.0
+	github.com/mattn/go-sqlite3 v1.14.42
 	github.com/multiformats/go-multiaddr v0.14.0
 	github.com/stretchr/testify v1.11.1
 	google.golang.org/protobuf v1.36.9

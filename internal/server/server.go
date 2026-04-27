@@ -117,7 +117,12 @@ func (s *Server) handleSlots(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	persisted := s.storage.ListSummaries(sourceID, limit)
+	persisted, err := s.storage.ListSummaries(sourceID, limit)
+	if err != nil {
+		log.Printf("list persisted slots for %s: %v", sourceID, err)
+		http.Error(w, "list persisted slots", http.StatusInternalServerError)
+		return
+	}
 	seen := make(map[uint64]struct{}, len(live))
 	for _, slot := range live {
 		seen[slot.Slot] = struct{}{}
@@ -155,6 +160,11 @@ func (s *Server) handleSlotDetail(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.Write(raw)
+			return
+		}
+		if !errors.Is(err, storage.ErrSlotNotFound) {
+			log.Printf("read persisted slot %d for %s: %v", slot, sourceID, err)
+			http.Error(w, "read persisted slot", http.StatusInternalServerError)
 			return
 		}
 		http.NotFound(w, r)
@@ -204,7 +214,13 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"slots": []any{}})
 		return
 	}
-	writeJSON(w, map[string]any{"slots": s.storage.SearchSlots(sourceID, fromSlot, toSlot, limit)})
+	slots, err := s.storage.SearchSlots(sourceID, fromSlot, toSlot, limit)
+	if err != nil {
+		log.Printf("search persisted slots for %s: %v", sourceID, err)
+		http.Error(w, "search persisted slots", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]any{"slots": slots})
 }
 
 var wsUpgrader = websocket.Upgrader{

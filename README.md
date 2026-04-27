@@ -25,10 +25,10 @@ Wiretap wraps any `go-libp2p` host to capture stream-level traffic without modif
 ┌─────────────────────────────────────────────────────────────┐
 │                   Backend (cmd/xray)                          │
 │                                                               │
-│  ┌──────────┐  ┌───────────┐  ┌──────────┐  ┌────────────┐ │
-│  │ Ingest   │->│ Processor │->│ Storage  │  │ HTTP/WS    │ │
-│  │ listener │  │ (per-src) │  │ (files)  │  │ server     │ │
-│  └──────────┘  └───────────┘  └──────────┘  └─────┬──────┘ │
+│  ┌──────────┐  ┌───────────┐  ┌──────────┐  ┌────────────┐  │
+│  │ Ingest   │->│ Processor │->│ Storage  │  │ HTTP/WS    │  │
+│  │ listener │  │ (per-src) │  │ (SQLite) │  │ server     │  │
+│  └──────────┘  └───────────┘  └──────────┘  └─────┬──────┘  │
 │                                                     │        │
 │  gossipsub/ --- RPC parser                          │        │
 │  eth/ ────────- SSZ decoder, slot clock             │        │
@@ -43,7 +43,7 @@ Wiretap wraps any `go-libp2p` host to capture stream-level traffic without modif
 
 The **probe** is a library that clients embed. It wraps the libp2p `Host`, intercepts every `Read`/`Write` on every stream, and forwards raw byte chunks over a lightweight ingest protocol to the backend. The probe has no Ethereum-specific logic; it sends opaque bytes.
 
-The **backend** is a standalone binary (`cmd/xray`). It accepts probe connections, reassembles gossipsub RPC frames, decodes SSZ payloads to extract slot numbers and block metadata, then aggregates traffic into 100ms time buckets per slot. It serves a REST + WebSocket API for the dashboard and persists finalized slots to disk.
+The **backend** is a standalone binary (`cmd/xray`). It accepts probe connections, reassembles gossipsub RPC frames, decodes SSZ payloads to extract slot numbers and block metadata, then aggregates traffic into 100ms time buckets per slot. It serves a REST + WebSocket API for the dashboard and persists finalized slots and source metadata to SQLite.
 
 The **dashboard** is a Solid.js single-page app that connects to the backend over WebSocket for live slot updates and REST for historical data.
 
@@ -65,6 +65,9 @@ Start the backend:
 go build -o xray ./cmd/xray
 ./xray --ingest=/tmp/xray.sock --listen=127.0.0.1:9100
 ```
+
+The backend uses `github.com/mattn/go-sqlite3`, so local builds need CGO enabled
+and a working C compiler.
 
 Start the dashboard dev server:
 
@@ -92,16 +95,21 @@ Prysm's fork supports this via `--instrument-socket` and `--instrument-file` fla
 
 ```
 *.go                    Wiretap producer SDK (host wrapper, sinks, emitter) at module root
-eth/                    Ethereum: slot clock, SSZ extraction, gossipsub decoder
-gossipsub/              Gossipsub RPC parser (varint framing, action atomization)
-backend/                Per-slot aggregation, REST/WS API, processor, storage
-wire/                   Ingest protocol codec (typed length-delimited framing)
-proto/                  Protobuf definitions and generated code
-  ingest/               Ingest protocol messages (Envelope, ClientHello, etc.)
+api/                    Shared JSON DTOs for REST/WebSocket responses
 cmd/xray/               Backend binary entrypoint
+internal/eth/           Ethereum slot clock and SSZ extraction
+internal/gossipsub/     Gossipsub RPC parser
+internal/ingest/        Probe connection listener and ingest sessions
+internal/processor/     Per-source aggregation and finalized slot production
+internal/server/        REST/WebSocket API server
+internal/sources/       Probe source registry
+internal/storage/       SQLite persistence for sources and finalized slots
+proto/wiretap/          Protobuf definitions and generated ingest messages
+proto/wiretap/wire/     Typed length-delimited ingest protocol codec
 itest/                  Integration tests (gossipsub decoding, introspector E2E)
 dashboard/              Solid.js web dashboard ("Ethereum Xray")
-docs/                   Specs and plans
+clients/                Example or integration client code
+gen/                    Generated support code
 ```
 
 ## Probe integration
@@ -164,16 +172,16 @@ Connect to `/api/ws?source=X`. The server sends:
 
 ## Persistence
 
-Finalized slots are written to disk under `<data-dir>/<source_id>/`:
+Finalized slots and source metadata are written to SQLite at `<data-dir>/xray.db`.
+Slot summaries and details are stored in SQLite JSONB columns with scalar
+`source_id` and `slot` columns for indexed lookup.
 
-```
-<source_id>/
-  source.json                 Source metadata (peer ID, client name)
-  slots/<slot>.json           Full slot detail (summary + buckets + breakdown)
-  index/<epoch>.jsonl         One SlotSummary JSON per line, append-only
-```
-
-Retention pruning runs daily, removing slot files and epoch indices older than `--retention-days`.
+On startup, legacy `<data-dir>/<source_id>/source.json` and `slots/*.json` data
+is imported into SQLite once. Malformed legacy JSON files are moved under
+`<data-dir>/legacy-failed/`, and successfully imported legacy files are removed.
+Legacy `index/*.jsonl` files are redundant because summaries are reconstructed
+from slot details. Retention pruning runs daily, removing slot rows older than
+`--retention-days`.
 
 ## Development
 

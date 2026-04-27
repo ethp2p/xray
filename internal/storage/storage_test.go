@@ -2,6 +2,8 @@ package storage
 
 import (
 	"bytes"
+	"database/sql"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,10 +11,12 @@ import (
 )
 
 func TestStorageWriteAndReadSlot(t *testing.T) {
-	s, err := NewStorage(t.TempDir())
+	dir := t.TempDir()
+	s, err := NewStorage(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer s.Close()
 	detail := SlotDetail{
 		Summary:   SlotSummary{Slot: 100, Epoch: 3, BytesIn: 500, BytesOut: 300},
 		Breakdown: []SlotBreakdown{{Protocol: "meshsub", BytesIn: 500}},
@@ -30,13 +34,49 @@ func TestStorageWriteAndReadSlot(t *testing.T) {
 	if !bytes.Contains(raw, []byte(`"slot":100`)) {
 		t.Fatal("slot data should contain slot number")
 	}
+
+	db, err := sql.Open("sqlite3", filepath.Join(dir, "xray.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	var detailType, detailSlot string
+	err = db.QueryRow(`
+		SELECT typeof(detail), json_extract(detail, '$.summary.slot')
+		FROM slots
+		WHERE source_id = ? AND slot = ?
+	`, "src1", 100).Scan(&detailType, &detailSlot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if detailType != "blob" {
+		t.Fatalf("expected JSONB detail to be stored as blob, got %s", detailType)
+	}
+	if detailSlot != "100" {
+		t.Fatalf("expected JSONB detail to be queryable, got slot %s", detailSlot)
+	}
+
+	var columnType string
+	err = db.QueryRow(`
+		SELECT type
+		FROM pragma_table_info('slots')
+		WHERE name = 'detail'
+	`).Scan(&columnType)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if columnType != "JSONB" {
+		t.Fatalf("expected detail column type JSONB, got %s", columnType)
+	}
 }
 
-func TestStorageEpochIndex(t *testing.T) {
+func TestStorageListSummariesSorted(t *testing.T) {
 	s, err := NewStorage(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer s.Close()
 	for _, slot := range []uint64{96, 97, 98} {
 		detail := SlotDetail{
 			Summary: SlotSummary{Slot: slot, Epoch: slot / 32, BytesIn: uint64(slot * 10)},
@@ -45,7 +85,10 @@ func TestStorageEpochIndex(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	summaries := s.ListSummaries("src1", 10)
+	summaries, err := s.ListSummaries("src1", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(summaries) != 3 {
 		t.Fatalf("expected 3 summaries, got %d", len(summaries))
 	}
@@ -59,6 +102,7 @@ func TestStorageDuplicateSlotSkipped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer s.Close()
 	detail := SlotDetail{
 		Summary: SlotSummary{Slot: 100, Epoch: 3},
 	}
@@ -68,45 +112,77 @@ func TestStorageDuplicateSlotSkipped(t *testing.T) {
 	if err := s.WriteSlot("src1", detail); err != nil {
 		t.Fatal(err)
 	}
-	summaries := s.ListSummaries("src1", 10)
+	summaries, err := s.ListSummaries("src1", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(summaries) != 1 {
 		t.Fatalf("expected 1 summary (deduped), got %d", len(summaries))
 	}
 }
 
-func TestStorageTruncatedJSONLRecovery(t *testing.T) {
+func TestStorageMigratesLegacySlotFiles(t *testing.T) {
 	dir := t.TempDir()
-	s, err := NewStorage(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
 	detail := SlotDetail{
 		Summary: SlotSummary{Slot: 100, Epoch: 3, BytesIn: 500},
 	}
-	if err := s.WriteSlot("src1", detail); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, "src1", "slots"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	epochFile := filepath.Join(dir, "src1", "index", "3.jsonl")
-	f, err := os.OpenFile(epochFile, os.O_APPEND|os.O_WRONLY, 0644)
+	detailJSON, err := json.Marshal(detail)
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.WriteString(`{"slot":101,"epoch":3,"bytes_in":60`)
-	f.Close()
-
+	if err := os.WriteFile(filepath.Join(dir, "src1", "slots", "100.json"), detailJSON, 0644); err != nil {
+		t.Fatal(err)
+	}
 	s2, err := NewStorage(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s2.LoadSummaryIndex("src1"); err != nil {
+	defer s2.Close()
+	summaries, err := s2.ListSummaries("src1", 10)
+	if err != nil {
 		t.Fatal(err)
 	}
-	summaries := s2.ListSummaries("src1", 10)
 	if len(summaries) != 1 {
 		t.Fatalf("expected 1 summary after recovery, got %d", len(summaries))
 	}
 	if summaries[0].Slot != 100 {
 		t.Fatalf("expected slot 100, got %d", summaries[0].Slot)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "src1", "slots")); !os.IsNotExist(err) {
+		t.Fatal("legacy slots dir should be removed after migration")
+	}
+}
+
+func TestStorageLegacyMigrationQuarantinesMalformedSlotFile(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "src1", "slots"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "src1", "slots", "100.json"), []byte(`{"summary":`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err := NewStorage(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	if _, err := os.Stat(filepath.Join(dir, ".legacy-json-migrated")); err != nil {
+		t.Fatal("migration marker should be written after quarantining malformed legacy data")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "legacy-failed", "src1", "slots", "100.json")); err != nil {
+		t.Fatalf("expected malformed legacy slot to be quarantined: %v", err)
+	}
+	summaries, err := s.ListSummaries("src1", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(summaries) != 0 {
+		t.Fatalf("expected no migrated summaries from malformed legacy data, got %d", len(summaries))
 	}
 }
 
@@ -116,6 +192,7 @@ func TestStorageSourceMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer s.Close()
 	info := SourceInfo{
 		SourceID:   "src1",
 		PeerID:     []byte("peer123"),
@@ -130,6 +207,7 @@ func TestStorageSourceMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer s2.Close()
 	metas, err := s2.LoadSourceMetas()
 	if err != nil {
 		t.Fatal(err)
@@ -147,6 +225,7 @@ func TestStorageSearchSlots(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer s.Close()
 	for slot := uint64(90); slot <= 110; slot++ {
 		detail := SlotDetail{
 			Summary: SlotSummary{Slot: slot, Epoch: slot / 32},
@@ -155,7 +234,10 @@ func TestStorageSearchSlots(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	results := s.SearchSlots("src1", 95, 105, 100)
+	results, err := s.SearchSlots("src1", 95, 105, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(results) != 11 {
 		t.Fatalf("expected 11 results (95-105), got %d", len(results))
 	}
@@ -169,13 +251,17 @@ func TestStorageWriteThenSearch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer s.Close()
 	detail := SlotDetail{
 		Summary: SlotSummary{Slot: 100, Epoch: 3, BytesIn: 500, BytesOut: 300},
 	}
 	if err := s.WriteSlot("src1", detail); err != nil {
 		t.Fatal(err)
 	}
-	results := s.SearchSlots("src1", 99, 101, 10)
+	results, err := s.SearchSlots("src1", 99, 101, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(results) != 1 {
 		t.Fatalf("expected 1 search result, got %d", len(results))
 	}
@@ -184,11 +270,25 @@ func TestStorageWriteThenSearch(t *testing.T) {
 	}
 }
 
+func TestStorageRejectsSlotsOutsideSQLiteIntegerRange(t *testing.T) {
+	s, err := NewStorage(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	err = s.WriteSlot("src1", SlotDetail{Summary: SlotSummary{Slot: uint64(1 << 63)}})
+	if err == nil {
+		t.Fatal("expected slot outside sqlite integer range to fail")
+	}
+}
+
 func TestStoragePrune(t *testing.T) {
 	s, err := NewStorage(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer s.Close()
 
 	genesisUnix := int64(1606824023)
 	secondsPerSlot := uint64(12)
@@ -215,7 +315,10 @@ func TestStoragePrune(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	summaries := s.ListSummaries("src1", 100)
+	summaries, err := s.ListSummaries("src1", 100)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(summaries) != 1 {
 		t.Fatalf("expected 1 summary after prune, got %d", len(summaries))
 	}
