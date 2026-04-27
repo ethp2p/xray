@@ -35,6 +35,7 @@ message ClientHello {
 message ServerHello {
   uint32 protocol_version = 1;
   string source_id = 2;         // backend-assigned, stable across reconnects
+  uint64 last_acked_seq = 3;    // highest seq the server has applied for this source; 0 = fresh attach
 }
 
 message SnapshotStart {}

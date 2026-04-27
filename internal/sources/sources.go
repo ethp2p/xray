@@ -22,25 +22,25 @@ func DeriveSourceID(peerID []byte) string {
 	return peer.ID(peerID).String()
 }
 
-type SourceRegistry struct {
+type Registry struct {
 	mu      sync.RWMutex
 	sources map[string]*SourceInfo
 }
 
-func NewSourceRegistry() *SourceRegistry {
-	return &SourceRegistry{
+func NewSourceRegistry() *Registry {
+	return &Registry{
 		sources: make(map[string]*SourceInfo),
 	}
 }
 
-func (r *SourceRegistry) Register(info SourceInfo) {
+func (r *Registry) Register(info SourceInfo) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	cp := info
 	r.sources[info.SourceID] = &cp
 }
 
-func (r *SourceRegistry) Get(sourceID string) (SourceInfo, bool) {
+func (r *Registry) Get(sourceID string) (SourceInfo, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	s, ok := r.sources[sourceID]
@@ -50,7 +50,7 @@ func (r *SourceRegistry) Get(sourceID string) (SourceInfo, bool) {
 	return *s, true
 }
 
-func (r *SourceRegistry) SetConnected(sourceID string, connected bool) {
+func (r *Registry) SetConnected(sourceID string, connected bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if s, ok := r.sources[sourceID]; ok {
@@ -58,7 +58,7 @@ func (r *SourceRegistry) SetConnected(sourceID string, connected bool) {
 	}
 }
 
-func (r *SourceRegistry) List() []SourceInfo {
+func (r *Registry) List() []SourceInfo {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	list := make([]SourceInfo, 0, len(r.sources))
@@ -68,7 +68,7 @@ func (r *SourceRegistry) List() []SourceInfo {
 	return list
 }
 
-func (r *SourceRegistry) DefaultSourceID() (string, error) {
+func (r *Registry) DefaultSourceID() (string, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	if len(r.sources) == 0 {

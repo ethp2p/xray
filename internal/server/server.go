@@ -41,7 +41,7 @@ type pendingKey struct {
 
 type Server struct {
 	processor *processor.Processor
-	registry  *sources.SourceRegistry
+	registry  *sources.Registry
 	storage   *storage.Storage
 	staticDir string
 
@@ -53,7 +53,7 @@ type Server struct {
 	flushScheduled bool
 }
 
-func NewServer(p *processor.Processor, registry *sources.SourceRegistry, store *storage.Storage) *Server {
+func NewServer(p *processor.Processor, registry *sources.Registry, store *storage.Storage) *Server {
 	s := &Server{
 		processor:      p,
 		registry:       registry,

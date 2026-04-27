@@ -12,10 +12,14 @@ import (
 	"github.com/ethp2p/xray/proto/wiretap/wire"
 )
 
-// SinkIngest dials the backend's ingest listener and streams envelopes. On
-// connect it performs a ClientHello/ServerHello handshake and replays the
-// emitter's current state as a snapshot before forwarding live envelopes.
-// Reconnects automatically if the connection drops.
+// SinkIngest dials the backend's ingest listener and streams envelopes.
+// After the ClientHello/ServerHello handshake the server reports the highest
+// envelope seq it has applied; if non-zero and still in the emitter's ring,
+// the missing range is replayed directly from the ring so a transient
+// disconnect loses no events. Otherwise — fresh attach, probe restart, or a
+// disconnect long enough that the ring rolled past the cursor — a full
+// snapshot is sent and the server resets its per-source state. Reconnects
+// automatically if the connection drops.
 type SinkIngest struct {
 	mu sync.Mutex
 
@@ -70,8 +74,10 @@ func (s *SinkIngest) WaitForAttach() error {
 	}
 }
 
-// Write enqueues an envelope for transmission. Drops silently if the buffer is
-// full; the emitter's ring buffer remains the source of truth for catch-up.
+// Write enqueues an envelope for transmission. If sendCh is full, the envelope
+// is not enqueued here, but it has already been recorded in the emitter's ring
+// buffer — on reconnect, the emitter is replayed from the server's last-acked
+// seq, so any envelope dropped here is delivered then.
 func (s *SinkIngest) Write(env *wiretappb.Envelope) bool {
 	if s.closed.Load() {
 		return false
@@ -108,7 +114,8 @@ func (s *SinkIngest) connectLoop() {
 		default:
 		}
 
-		if err := s.connect(); err != nil {
+		lastAcked, err := s.connect()
+		if err != nil {
 			select {
 			case <-s.done:
 				return
@@ -117,9 +124,7 @@ func (s *SinkIngest) connectLoop() {
 			continue
 		}
 
-		s.drainSendCh()
-
-		if err := s.sendSnapshot(); err != nil {
+		if err := s.sendCatchup(lastAcked); err != nil {
 			s.closeConn()
 			continue
 		}
@@ -133,10 +138,10 @@ func (s *SinkIngest) connectLoop() {
 	}
 }
 
-func (s *SinkIngest) connect() error {
+func (s *SinkIngest) connect() (uint64, error) {
 	conn, err := net.DialTimeout(wire.InferNetwork(s.address), s.address, 5*time.Second)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	hello := &wiretappb.ClientHello{
@@ -148,13 +153,13 @@ func (s *SinkIngest) connect() error {
 	}
 	if err := wire.WriteClientHello(conn, hello); err != nil {
 		conn.Close()
-		return err
+		return 0, err
 	}
 
 	serverHello, err := wire.ReadServerHello(conn)
 	if err != nil {
 		conn.Close()
-		return err
+		return 0, err
 	}
 
 	s.mu.Lock()
@@ -162,15 +167,33 @@ func (s *SinkIngest) connect() error {
 	s.sourceID = serverHello.SourceId
 	s.mu.Unlock()
 
-	return nil
+	return serverHello.LastAckedSeq, nil
 }
 
-func (s *SinkIngest) sendSnapshot() error {
+// sendCatchup brings the server up to date after the handshake. If the server
+// is fresh (last_acked == 0) or the emitter's ring no longer covers
+// [last_acked+1, current], a full snapshot is sent — its SnapshotStart marker
+// also resets server-side state. Otherwise the missing range is replayed
+// directly from the ring; envelopes still queued in sendCh that overlap with
+// the replay are deduped server-side via Envelope.Seq.
+func (s *SinkIngest) sendCatchup(lastAcked uint64) error {
 	s.mu.Lock()
 	conn := s.conn
 	s.mu.Unlock()
 	if conn == nil {
 		return errors.New("no connection")
+	}
+
+	if lastAcked > 0 {
+		replay, ok := s.emitter.EventsFromSeq(lastAcked + 1)
+		if ok {
+			for _, env := range replay {
+				if err := wire.WriteEnvelope(conn, env); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
 	}
 
 	for _, env := range snapshotEnvelopes(s.emitter.snapshot()) {
@@ -210,16 +233,6 @@ func (s *SinkIngest) closeConn() {
 		s.conn = nil
 	}
 	s.mu.Unlock()
-}
-
-func (s *SinkIngest) drainSendCh() {
-	for {
-		select {
-		case <-s.sendCh:
-		default:
-			return
-		}
-	}
 }
 
 // randomBootID returns 16 random bytes that change on each process start.

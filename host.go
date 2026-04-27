@@ -95,8 +95,7 @@ func Wiretap(h host.Host, opts ...Option) (*Host, error) {
 	}
 
 	emitter := NewEmitter(cfg.ringBufferSize)
-	strings := newStringInterner(emitter)
-	emitter.strings = strings
+	strings := emitter.strings
 
 	var worker *decodeWorker
 	var initDecode func(streamID uint32, proto string) (StreamDecoder, []OnMessage)

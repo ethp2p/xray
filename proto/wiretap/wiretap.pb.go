@@ -411,7 +411,8 @@ func (x *ClientHello) GetStartedAtNs() int64 {
 type ServerHello struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	ProtocolVersion uint32                 `protobuf:"varint,1,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
-	SourceId        string                 `protobuf:"bytes,2,opt,name=source_id,json=sourceId,proto3" json:"source_id,omitempty"` // backend-assigned, stable across reconnects
+	SourceId        string                 `protobuf:"bytes,2,opt,name=source_id,json=sourceId,proto3" json:"source_id,omitempty"`                // backend-assigned, stable across reconnects
+	LastAckedSeq    uint64                 `protobuf:"varint,3,opt,name=last_acked_seq,json=lastAckedSeq,proto3" json:"last_acked_seq,omitempty"` // highest seq the server has applied for this source; 0 = fresh attach
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -458,6 +459,13 @@ func (x *ServerHello) GetSourceId() string {
 		return x.SourceId
 	}
 	return ""
+}
+
+func (x *ServerHello) GetLastAckedSeq() uint64 {
+	if x != nil {
+		return x.LastAckedSeq
+	}
+	return 0
 }
 
 type SnapshotStart struct {
@@ -1020,10 +1028,11 @@ const file_proto_wiretap_wiretap_proto_rawDesc = "" +
 	"\vclient_name\x18\x03 \x01(\tR\n" +
 	"clientName\x12\x17\n" +
 	"\aboot_id\x18\x04 \x01(\fR\x06bootId\x12\"\n" +
-	"\rstarted_at_ns\x18\x05 \x01(\x03R\vstartedAtNs\"U\n" +
+	"\rstarted_at_ns\x18\x05 \x01(\x03R\vstartedAtNs\"{\n" +
 	"\vServerHello\x12)\n" +
 	"\x10protocol_version\x18\x01 \x01(\rR\x0fprotocolVersion\x12\x1b\n" +
-	"\tsource_id\x18\x02 \x01(\tR\bsourceId\"\x0f\n" +
+	"\tsource_id\x18\x02 \x01(\tR\bsourceId\x12$\n" +
+	"\x0elast_acked_seq\x18\x03 \x01(\x04R\flastAckedSeq\"\x0f\n" +
 	"\rSnapshotStart\"\r\n" +
 	"\vSnapshotEnd\"1\n" +
 	"\tStringDef\x12\x0e\n" +

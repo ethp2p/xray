@@ -483,7 +483,7 @@ func startIntrospectorFixture(t *testing.T, ctx context.Context) introspectorFix
 	clock := eth.NewSlotClock(time.Unix(1606824023, 0), 12)
 	processor := processor.NewProcessor(clock)
 	registry := sources.NewSourceRegistry()
-	ingestListener := ingest.NewIngestListener(processor, registry, nil)
+	ingestListener := ingest.NewListener(processor, registry, nil)
 
 	ingestCtx, ingestCancel := context.WithCancel(ctx)
 	t.Cleanup(ingestCancel)

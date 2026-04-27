@@ -1,6 +1,7 @@
 package ingest
 
 import (
+	"bytes"
 	"context"
 	"log"
 	"net"
@@ -15,14 +16,14 @@ import (
 	"github.com/ethp2p/xray/proto/wiretap/wire"
 )
 
-// IngestListener accepts inbound connections from probes, performs a
+// Listener accepts inbound connections from probes, performs a
 // ClientHello/ServerHello handshake, then streams Envelope events into the
 // Processor. Each unique source_id gets at most one active session; a
 // reconnecting probe preempts the previous connection.
-type IngestListener struct {
+type Listener struct {
 	ctx       context.Context
 	processor *processor.Processor
-	registry  *sources.SourceRegistry
+	registry  *sources.Registry
 	storage   *storage.Storage
 	mu        sync.Mutex
 	sessions  map[string]*activeSession
@@ -33,8 +34,24 @@ type activeSession struct {
 	conn   net.Conn
 }
 
-func NewIngestListener(p *processor.Processor, registry *sources.SourceRegistry, store *storage.Storage) *IngestListener {
-	return &IngestListener{
+// CloseSession closes the conn for any active session matching sourceID.
+// Returns true if a session was closed. The handleConnection goroutine
+// observes the closed conn, exits its read loop, and runs its deferred
+// cleanup, leaving the per-source cursor and aggregated state intact so the
+// next attach can resume via replay.
+func (l *Listener) CloseSession(sourceID string) bool {
+	l.mu.Lock()
+	sess, ok := l.sessions[sourceID]
+	l.mu.Unlock()
+	if !ok {
+		return false
+	}
+	_ = sess.conn.Close()
+	return true
+}
+
+func NewListener(p *processor.Processor, registry *sources.Registry, store *storage.Storage) *Listener {
+	return &Listener{
 		processor: p,
 		registry:  registry,
 		storage:   store,
@@ -45,7 +62,7 @@ func NewIngestListener(p *processor.Processor, registry *sources.SourceRegistry,
 // ListenAndServe binds to address and accepts probe connections until ctx is
 // cancelled. Address is interpreted as a Unix socket path if it contains '/',
 // otherwise as a TCP address.
-func (l *IngestListener) ListenAndServe(ctx context.Context, address string) error {
+func (l *Listener) ListenAndServe(ctx context.Context, address string) error {
 	l.ctx = ctx
 
 	network := wire.InferNetwork(address)
@@ -77,7 +94,7 @@ func (l *IngestListener) ListenAndServe(ctx context.Context, address string) err
 	}
 }
 
-func (l *IngestListener) handleConnection(conn net.Conn) {
+func (l *Listener) handleConnection(conn net.Conn) {
 	hello, err := wire.ReadClientHello(conn)
 	if err != nil {
 		conn.Close()
@@ -119,9 +136,19 @@ func (l *IngestListener) handleConnection(conn net.Conn) {
 		cancel()
 	}()
 
+	// First attach or probe restart (boot ID changed) means the prior cursor
+	// and per-source alias maps are stale; reset before reading the cursor
+	// so the probe sees last_acked_seq=0 and falls back to a full snapshot.
+	prior, hadPrior := l.registry.Get(sourceID)
+	if !hadPrior || !bytes.Equal(prior.BootID, hello.BootId) {
+		l.processor.ResetSource(sourceID)
+	}
+	lastAcked := l.processor.LastAppliedSeq(sourceID)
+
 	err = wire.WriteServerHello(conn, &wiretappb.ServerHello{
 		ProtocolVersion: wire.IngestProtocolVersion,
 		SourceId:        sourceID,
+		LastAckedSeq:    lastAcked,
 	})
 	if err != nil {
 		return
@@ -142,8 +169,6 @@ func (l *IngestListener) handleConnection(conn net.Conn) {
 			log.Printf("ingest: failed to persist source meta for %s: %v", sourceID, err)
 		}
 	}
-
-	l.processor.ResetSourceAliases(sourceID)
 
 	for {
 		select {

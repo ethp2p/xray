@@ -34,11 +34,12 @@ type streamState struct {
 }
 
 type sourceState struct {
-	strings  map[uint32]string
-	streams  map[uint64]*streamState
-	peers    *PeerMap
-	slots    map[uint64]*slotAggregate
-	lastSlot uint64
+	strings        map[uint32]string
+	streams        map[uint64]*streamState
+	peers          *PeerMap
+	slots          map[uint64]*slotAggregate
+	lastSlot       uint64
+	lastAppliedSeq uint64
 }
 
 func newSourceState() *sourceState {
@@ -81,6 +82,27 @@ func (p *Processor) SetOnFinalize(fn func(string, SlotDetail)) {
 func (p *Processor) ApplyForSource(sourceID string, event *wiretappb.Envelope) {
 	if event == nil {
 		return
+	}
+
+	switch event.Payload.(type) {
+	case *wiretappb.Envelope_SnapshotStart:
+		p.ResetSource(sourceID)
+		return
+	case *wiretappb.Envelope_SnapshotEnd:
+		return
+	}
+
+	// Snapshot upsert envelopes (StringDef, PeerUpsert, ...) are synthesized
+	// client-side with seq=0 and apply unconditionally. Live envelopes carry
+	// monotonic seq starting at 1 and are deduped against the per-source
+	// cursor so ring-replay overlap with sendCh produces no double-apply.
+	if event.Seq != 0 {
+		p.mu.Lock()
+		if src := p.sources[sourceID]; src != nil && event.Seq <= src.lastAppliedSeq {
+			p.mu.Unlock()
+			return
+		}
+		p.mu.Unlock()
 	}
 
 	switch payload := event.Payload.(type) {
@@ -128,6 +150,15 @@ func (p *Processor) ApplyForSource(sourceID string, event *wiretappb.Envelope) {
 
 	case *wiretappb.Envelope_StreamChunk:
 		p.handleStreamChunk(sourceID, event.ObservedAtNs, payload.StreamChunk)
+	}
+
+	if event.Seq != 0 {
+		p.mu.Lock()
+		src := p.ensureSourceLocked(sourceID)
+		if event.Seq > src.lastAppliedSeq {
+			src.lastAppliedSeq = event.Seq
+		}
+		p.mu.Unlock()
 	}
 }
 
@@ -182,7 +213,11 @@ func (p *Processor) CurrentSlot() uint64 {
 	return p.currentSlotLocked()
 }
 
-func (p *Processor) ResetSourceAliases(sourceID string) {
+// ResetSource clears the per-source alias maps (strings, streams, peers) and
+// zeros the seq cursor. Called on first attach, on probe restart (boot ID
+// change), and on receipt of SnapshotStart. Slot aggregates are preserved so
+// historical per-slot data survives reconnects.
+func (p *Processor) ResetSource(sourceID string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -193,6 +228,21 @@ func (p *Processor) ResetSourceAliases(sourceID string) {
 	src.strings = make(map[uint32]string)
 	src.streams = make(map[uint64]*streamState)
 	src.peers.Clear()
+	src.lastAppliedSeq = 0
+}
+
+// LastAppliedSeq returns the highest envelope seq the processor has applied
+// for sourceID, or 0 if the source is unknown. The handshake reads this and
+// reports it back to the probe so the probe can replay the [seq+1, current]
+// range from its ring buffer without losing or duplicating events.
+func (p *Processor) LastAppliedSeq(sourceID string) uint64 {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	src := p.sources[sourceID]
+	if src == nil {
+		return 0
+	}
+	return src.lastAppliedSeq
 }
 
 func (p *Processor) ListPeers(sourceID string) []PeerSummary {

@@ -40,9 +40,12 @@ func NewEmitter(bufferSize int) *Emitter {
 	if bufferSize <= 0 {
 		bufferSize = DefaultRingBufferSize
 	}
-	return &Emitter{
-		buffer: make([]*wiretappb.Envelope, bufferSize),
+	e := &Emitter{
+		buffer:  make([]*wiretappb.Envelope, bufferSize),
+		nextSeq: 1, // seq=0 is reserved for synthesized snapshot envelopes
 	}
+	e.strings = newStringInterner(e)
+	return e
 }
 
 // NextPeerAlias returns the next peer alias.
@@ -88,6 +91,37 @@ func (e *Emitter) addToBufferLocked(env *wiretappb.Envelope) {
 	if e.bufferLen < len(e.buffer) {
 		e.bufferLen++
 	}
+}
+
+// EventsFromSeq returns ring-buffered envelopes whose Seq >= startSeq, in
+// emission order. The boolean reports whether the requested range is covered:
+// false means the ring's oldest envelope is newer than startSeq, i.e. a gap
+// occurred and the caller must fall back to a snapshot. An empty slice with
+// ok=true means there is nothing to replay (caller is already caught up).
+func (e *Emitter) EventsFromSeq(startSeq uint64) ([]*wiretappb.Envelope, bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.bufferLen == 0 {
+		return nil, true
+	}
+
+	oldestIdx := 0
+	if e.bufferLen == len(e.buffer) {
+		oldestIdx = e.bufferIdx
+	}
+	oldestSeq := e.buffer[oldestIdx].Seq
+	if startSeq < oldestSeq {
+		return nil, false
+	}
+
+	out := make([]*wiretappb.Envelope, 0, e.bufferLen)
+	for i := 0; i < e.bufferLen; i++ {
+		env := e.buffer[(oldestIdx+i)%len(e.buffer)]
+		if env.Seq >= startSeq {
+			out = append(out, env)
+		}
+	}
+	return out, true
 }
 
 // snapshot is the probe's current state, replayed by SinkFile and SinkIngest

@@ -89,7 +89,7 @@ func main() {
 		}
 	}()
 
-	ingestListener := ingest.NewIngestListener(proc, registry, store)
+	ingestListener := ingest.NewListener(proc, registry, store)
 
 	go func() {
 		if err := ingestListener.ListenAndServe(ctx, *ingestAddr); err != nil && ctx.Err() == nil {

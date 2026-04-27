@@ -16,7 +16,7 @@ const (
 	WireEnvelope    byte = 0x03
 
 	MaxMessageSize               = 4 << 20 // 4 MiB
-	IngestProtocolVersion uint32 = 2
+	IngestProtocolVersion uint32 = 3
 )
 
 func WriteClientHello(w io.Writer, msg *wiretappb.ClientHello) error {
