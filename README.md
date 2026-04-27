@@ -1,47 +1,52 @@
-# Wiretap
+# Xray
 
-Transparent libp2p network instrumentation with real-time analysis dashboard for Ethereum consensus layer research.
+Real-time analysis of network utilization of Ethereum Consensus Layer nodes.
 
 **Live dashboard**: [xray.ethp2p.dev](https://xray.ethp2p.dev)
 
-Wiretap wraps any `go-libp2p` host to capture stream-level traffic without modifying application code. A separate backend process decodes gossipsub messages, extracts SSZ slot numbers, and aggregates per-slot bandwidth breakdowns. A Solid.js dashboard ("Ethereum Xray") renders the data in real time.
+## How it works
+
+Xray wraps the libp2p Host to capture stream-level traffic without modifying application code.
+
+A separate backend process decodes gossipsub messages, extracts SSZ slot numbers, and aggregates per-slot bandwidth breakdowns.
+
+A Solid.js dashboard ("Ethereum Xray") renders the data in real time.
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     Ethereum CL client                       │
+┌───────────────────────────────────────────────────────────────┐
+│                     Ethereum CL client                        │
 │                  (Prysm, Lighthouse, etc.)                    │
 │                                                               │
-│  ┌─────────────────────────────────────────────────────────┐ │
-│  │                    Wiretap (xray module root)            │ │
-│  │  Wraps go-libp2p Host, intercepts streams/connections    │ │
-│  │  Forwards raw bytes via ingest protocol                  │ │
-│  └──────────────────────┬──────────────────────────────────┘ │
-└─────────────────────────┼───────────────────────────────────┘
+│  ┌─────────────────────────────────────────────────────────┐  │
+│  │                 xray wiretap library                    │  │
+│  │  Wraps libp2p Host, intercepts streams/connections      │  │
+│  │  Forwards raw bytes via ingest protocol                 │  │
+│  └──────────────────────┬──────────────────────────────────┘  │
+└─────────────────────────┼─────────────────────────────────────┘
                           │ Unix socket / TCP
                           │ (ClientHello -> ServerHello -> Envelopes)
                           v
 ┌─────────────────────────────────────────────────────────────┐
-│                   Backend (cmd/xray)                          │
-│                                                               │
+│                   Backend (cmd/xray)                        │
+│                                                             │
 │  ┌──────────┐  ┌───────────┐  ┌──────────┐  ┌────────────┐  │
 │  │ Ingest   │->│ Processor │->│ Storage  │  │ HTTP/WS    │  │
 │  │ listener │  │ (per-src) │  │ (SQLite) │  │ server     │  │
 │  └──────────┘  └───────────┘  └──────────┘  └─────┬──────┘  │
-│                                                     │        │
-│  gossipsub/ --- RPC parser                          │        │
-│  eth/ ────────- SSZ decoder, slot clock             │        │
-└─────────────────────────────────────────────────────┼───────┘
-                                                      │
-                                              ┌───────v───────┐
-                                              │  Xray Dashboard│
-                                              │  (Solid.js)    │
-                                              │  localhost:5173 │
-                                              └───────────────┘
+│                                                   │         │
+│  gossipsub/ --- RPC parser                        │         │
+│  eth/ ────────- SSZ decoder, slot clock           │         │
+└───────────────────────────────────────────────────┼─────────┘
+                                                    │
+                                            ┌───────v─────────┐
+                                            │  Xray Dashboard │
+                                            │  (Solid.js)     │
+                                            └─────────────────┘
 ```
 
-The **probe** is a library that clients embed. It wraps the libp2p `Host`, intercepts every `Read`/`Write` on every stream, and forwards raw byte chunks over a lightweight ingest protocol to the backend. The probe has no Ethereum-specific logic; it sends opaque bytes.
+The **wiretap** is a library that clients embed. It wraps the libp2p `Host`, intercepts every `Read`/`Write` on every stream, and forwards raw byte chunks over a lightweight ingest protocol to the backend. The probe has no Ethereum-specific logic; it sends opaque bytes.
 
 The **backend** is a standalone binary (`cmd/xray`). It accepts probe connections, reassembles gossipsub RPC frames, decodes SSZ payloads to extract slot numbers and block metadata, then aggregates traffic into 100ms time buckets per slot. It serves a REST + WebSocket API for the dashboard and persists finalized slots and source metadata to SQLite.
 
@@ -141,27 +146,27 @@ defer ih.Close()
 
 Backend CLI flags (`cmd/xray`):
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--ingest` | `/tmp/xray.sock` | Ingest listener address (Unix path or host:port) |
-| `--listen` | `127.0.0.1:9100` | HTTP listen address for REST/WS API |
-| `--data-dir` | `~/.xray/data` | Persistence directory for slot data |
-| `--retention-days` | `30` | Slot retention period in days |
-| `--genesis-unix` | `1606824023` | Beacon chain genesis Unix timestamp |
-| `--seconds-per-slot` | `12` | Beacon chain seconds per slot |
-| `--static-dir` | (none) | Serve dashboard static files from this directory |
+| Flag                 | Default          | Description                                      |
+| -------------------- | ---------------- | ------------------------------------------------ |
+| `--ingest`           | `/tmp/xray.sock` | Ingest listener address (Unix path or host:port) |
+| `--listen`           | `127.0.0.1:9100` | HTTP listen address for REST/WS API              |
+| `--data-dir`         | `~/.xray/data`   | Persistence directory for slot data              |
+| `--retention-days`   | `30`             | Slot retention period in days                    |
+| `--genesis-unix`     | `1606824023`     | Beacon chain genesis Unix timestamp              |
+| `--seconds-per-slot` | `12`             | Beacon chain seconds per slot                    |
+| `--static-dir`       | (none)           | Serve dashboard static files from this directory |
 
 ## API
 
 ### REST endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/slots?source=X&limit=N&search=Q` | List slot summaries (live + persisted) |
-| GET | `/api/slots/:slot?source=X` | Slot detail with time buckets and breakdown |
-| GET | `/api/sources` | List connected probe sources |
-| GET | `/api/peers?source=X` | List peers with connection metadata |
-| GET | `/api/search?source=X&from_slot=A&to_slot=B&limit=N` | Search persisted slots by range |
+| Method | Path                                                 | Description                                 |
+| ------ | ---------------------------------------------------- | ------------------------------------------- |
+| GET    | `/api/slots?source=X&limit=N&search=Q`               | List slot summaries (live + persisted)      |
+| GET    | `/api/slots/:slot?source=X`                          | Slot detail with time buckets and breakdown |
+| GET    | `/api/sources`                                       | List connected probe sources                |
+| GET    | `/api/peers?source=X`                                | List peers with connection metadata         |
+| GET    | `/api/search?source=X&from_slot=A&to_slot=B&limit=N` | Search persisted slots by range             |
 
 ### WebSocket
 
@@ -172,7 +177,7 @@ Connect to `/api/ws?source=X`. The server sends:
 
 ## Persistence
 
-Finalized slots and source metadata are written to SQLite at `<data-dir>/xray.db`.
+Elapsed slots and source metadata are written to SQLite at `<data-dir>/xray.db`.
 Slot summaries and details are stored in SQLite JSONB columns with scalar
 `source_id` and `slot` columns for indexed lookup.
 
