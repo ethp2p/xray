@@ -26,4 +26,3 @@ dashboard/test-results/
 cmd/ingestdump/
 dogfood-output/
 itest/
-.cachebro/
