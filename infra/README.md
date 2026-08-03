@@ -20,7 +20,7 @@ Xray uses a read-only root filesystem. Prysm and Nethermind use writable disposa
 |---|---|
 | Nethermind | `1.36.0`, linux/amd64 manifest `sha256:d915b29966286ec9ceee400c889e0b18fd4d84e7895402f3f4fa5750209c0a25`; local image ID `cdb9f10e374c729affe6945856aa322d38eda2a38eb9011e207d3f256ac72742` |
 | Prysm fork | `ethp2p/prysm:xray`, commit `1fcc706ce44eacd253ae3f5078995c5b3437e5fd`; raptor image digest `sha256:336cb761957e5526239ecf265362c03a62979ca0a6ad89f63a88d6cda020c05a` |
-| Xray | `ethp2p/wiretap`, commit `728d16ac90fc698d71136e3959f8270a0f85df28`; imported production image ID `c24dddc9fe3135533c40beb1fe4c090e449b5f5f63919c3486e0b0768bb5fad6` |
+| Xray | `ethp2p/xray` (formerly `ethp2p/wiretap`), commit `728d16ac90fc698d71136e3959f8270a0f85df28`; imported production image ID `c24dddc9fe3135533c40beb1fe4c090e449b5f5f63919c3486e0b0768bb5fad6` |
 
 Prysm and Xray use local image tags on raptor. The image IDs recorded after each build are the rollout pins. Publishing both images to GHCR by digest is the next step for multi-host deployment.
 
@@ -115,10 +115,12 @@ The rollout does not delete the native binaries, tmux sessions, Docker image, Do
 
 Do not enable registry auto-update for these stateful clients.
 
-## Pre-rollout checks recorded on raptor
+## Rollout checks recorded on raptor
 
 - Podman `4.9.3`, cgroup v2, overlay storage, and runc.
 - The Podman generator produced all three services without errors.
 - Nethermind `1.36.0` started and stopped cleanly with UID/GID 1000, the JWT secret, dropped capabilities, and a temporary data directory.
 - Xray started with its read-only root, loopback port, bind-mounted data, and Unix socket.
 - Prysm commit `1fcc706ce4` connected to an isolated Xray ingest socket and reported `P2P instrumentation enabled`.
+- The production services were active after cutover. Nethermind had 100 peers, Prysm had zero sync distance and 84 connected peers, and local and public Xray APIs showed the same connected Prysm source.
+- Intentional Xray and Prysm service restarts recovered cleanly. The host still needs a reboot test after pending kernel and libc updates.
