@@ -1,9 +1,9 @@
 services:
   xray:
     build: .
-    user: "${UID:-1000}:${GID:-1000}"
+    user: "${XRAY_UID:-1000}:${XRAY_GID:-1000}"
     ports:
-      - "9100:9100"
+      - "127.0.0.1:9100:9100"
     volumes:
       - ${XRAY_DATA_DIR:-~/.xray/data}:/data
       - ${XRAY_SOCK_DIR:-/tmp}:/run/xray

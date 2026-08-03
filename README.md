@@ -52,17 +52,76 @@ The **backend** is a standalone binary (`cmd/xray`). It accepts probe connection
 
 The **dashboard** is a Solid.js single-page app that connects to the backend over WebSocket for live slot updates and REST for historical data.
 
-## Quick start
+## Installation
 
-### Run with Docker Compose
+### Docker Compose
+
+Docker Compose is the quickest way to install the Xray backend and dashboard.
+You need Git and a current Docker installation with Compose.
 
 ```bash
-docker compose up --build
+git clone https://github.com/ethp2p/xray.git
+cd xray
+
+export XRAY_DATA_DIR="$HOME/.xray/data"
+export XRAY_SOCK_DIR="$HOME/.xray/run"
+export XRAY_UID="$(id -u)"
+export XRAY_GID="$(id -g)"
+install -d "$XRAY_DATA_DIR" "$XRAY_SOCK_DIR"
+
+docker compose up --detach --build
 ```
 
-The backend listens on port 9100. Mount the probe's Unix socket directory as a volume (see `compose.yaml`).
+Open `http://127.0.0.1:9100`. Compose publishes the dashboard only on
+loopback. Put a local reverse proxy or tunnel in front of it if remote users
+need access.
 
-### Run locally
+The backend creates its ingest socket at `$XRAY_SOCK_DIR/xray.sock` on the
+host. Configure the instrumented client to use that path. Stop Xray with
+`docker compose down`. Its SQLite data remains in `$XRAY_DATA_DIR`.
+
+### Build from source
+
+Source builds need Go 1.25, CGO, a C compiler, and the SQLite development
+headers. Building the dashboard also needs Bun.
+
+```bash
+git clone https://github.com/ethp2p/xray.git
+cd xray
+
+install -d ./bin "$HOME/.xray/data"
+go build -o ./bin/xray ./cmd/xray
+
+cd dashboard
+bun install --frozen-lockfile
+bun run build
+cd ..
+
+./bin/xray \
+  --ingest=/tmp/xray.sock \
+  --listen=127.0.0.1:9100 \
+  --data-dir="$HOME/.xray/data" \
+  --static-dir=dashboard/dist
+```
+
+### Install the production stack
+
+The `infra/` directory defines the production stack as Podman Quadlets
+managed by systemd:
+
+- Nethermind execution client
+- the instrumented Prysm fork
+- Xray backend and dashboard
+- the shared runtime socket directory
+
+See [`infra/README.md`](infra/README.md) for pinned versions, image builds,
+installation, rollout, verification, upgrades, and rollback. The checked-in
+deployment targets Podman 4.9 on Ubuntu and keeps the JSON-RPC, Engine,
+Prysm API, and Xray dashboard ports on loopback.
+
+## Quick start
+
+### Run the backend during development
 
 Start the backend:
 
@@ -84,6 +143,11 @@ Open `http://localhost:5173`. Vite proxies API requests to the backend on `:9100
 
 ### Integrate with Prysm
 
+The maintained Prysm integration is the
+[`ethp2p/prysm`](https://github.com/ethp2p/prysm) `xray` branch, pinned in
+the production deployment to commit
+`1fcc706ce44eacd253ae3f5078995c5b3437e5fd`.
+
 ```go
 import "github.com/ethp2p/xray"
 
@@ -94,7 +158,26 @@ ih, err := xray.Wiretap(h,
 )
 ```
 
-Prysm's fork supports this via `--instrument-socket` and `--instrument-file` flags.
+Build the fork, then pass the socket to `beacon-chain`:
+
+```bash
+git clone --branch xray https://github.com/ethp2p/prysm.git
+cd prysm
+go build -o ./bin/beacon-chain ./cmd/beacon-chain
+
+./bin/beacon-chain \
+  --accept-terms-of-use \
+  --mainnet \
+  --execution-endpoint=http://127.0.0.1:8551 \
+  --jwt-secret=/path/to/jwt.hex \
+  --datadir=/path/to/prysm-data \
+  --p2p-instrument-socket=/path/to/xray.sock \
+  --p2p-instrument-wait-for-attach
+```
+
+The fork also supports `--p2p-instrument-file` for a local protobuf trace.
+`--p2p-instrument-wait-for-attach` blocks Prysm startup until Xray connects;
+omit it if instrumentation must not hold up the node.
 
 ## Project structure
 
@@ -113,8 +196,9 @@ proto/wiretap/          Protobuf definitions and generated ingest messages
 proto/wiretap/wire/     Typed length-delimited ingest protocol codec
 itest/                  Integration tests (gossipsub decoding, introspector E2E)
 dashboard/              Solid.js web dashboard ("Ethereum Xray")
-clients/                Example or integration client code
+clients/                Hand-written Rust and JavaScript producer SDKs
 gen/                    Generated support code
+infra/                  Podman Quadlets and production deployment runbook
 ```
 
 ## Probe integration
