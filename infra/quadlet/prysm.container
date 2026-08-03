@@ -24,7 +24,7 @@ HealthCmd=curl --fail --silent --show-error http://127.0.0.1:3500/eth/v1/node/he
 HealthInterval=30s
 HealthTimeout=10s
 HealthRetries=5
-HealthStartPeriod=2min
+HealthStartPeriod=2m
 HealthOnFailure=kill
 Exec=--accept-terms-of-use --mainnet --execution-endpoint=http://127.0.0.1:8551 --jwt-secret=/run/secrets/jwt.hex --checkpoint-sync-url=https://mainnet.checkpoint.sigp.io/ --genesis-beacon-api-url=https://mainnet.checkpoint.sigp.io/ --p2p-instrument-socket=/run/xray/wiretap.sock --p2p-instrument-wait-for-attach --datadir=/data/.eth2
 PodmanArgs=--stop-timeout=120
