@@ -1,0 +1,40 @@
+[Unit]
+Description=Prysm consensus client with Xray instrumentation
+Documentation=https://prysm.offchainlabs.com/
+Wants=nethermind.service xray.service
+After=nethermind.service xray.service
+
+[Container]
+Image=localhost/ethp2p/prysm:1fcc706ce4
+Pull=never
+ContainerName=ethp2p-prysm
+Network=host
+User=1000
+Group=1000
+Volume=/data/.eth2:/data/.eth2
+Volume=/run/xray:/run/xray
+Secret=eth-jwt,type=mount,target=jwt.hex,mode=0440,uid=1000,gid=1000
+Environment=HOME=/tmp
+NoNewPrivileges=true
+DropCapability=all
+LogDriver=journald
+PidsLimit=8192
+Ulimit=nofile=1048576:1048576
+HealthCmd=curl --fail --silent --show-error http://127.0.0.1:3500/eth/v1/node/health
+HealthInterval=30s
+HealthTimeout=10s
+HealthRetries=5
+HealthStartPeriod=2min
+HealthOnFailure=kill
+Exec=--accept-terms-of-use --mainnet --execution-endpoint=http://127.0.0.1:8551 --jwt-secret=/run/secrets/jwt.hex --checkpoint-sync-url=https://mainnet.checkpoint.sigp.io/ --genesis-beacon-api-url=https://mainnet.checkpoint.sigp.io/ --p2p-instrument-socket=/run/xray/wiretap.sock --p2p-instrument-wait-for-attach --datadir=/data/.eth2
+PodmanArgs=--stop-timeout=120
+
+[Service]
+Restart=always
+RestartSec=10
+TimeoutStartSec=10min
+TimeoutStopSec=3min
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target

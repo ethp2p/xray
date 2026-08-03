@@ -1,0 +1,35 @@
+[Unit]
+Description=Nethermind execution client
+Documentation=https://docs.nethermind.io/
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+Image=docker.io/nethermind/nethermind@sha256:d915b29966286ec9ceee400c889e0b18fd4d84e7895402f3f4fa5750209c0a25
+Pull=missing
+ContainerName=ethp2p-nethermind
+Network=host
+User=1000
+Group=1000
+Volume=/data/nethermind:/data/nethermind
+Secret=eth-jwt,type=mount,target=jwt.hex,mode=0440,uid=1000,gid=1000
+Environment=HOME=/tmp
+Environment=DOTNET_CLI_HOME=/tmp
+Environment=DOTNET_EnableDiagnostics=0
+NoNewPrivileges=true
+DropCapability=all
+LogDriver=journald
+PidsLimit=8192
+Ulimit=nofile=1048576:1048576
+Exec=-c mainnet --data-dir=/data/nethermind --jsonrpc-jwtsecretfile=/run/secrets/jwt.hex --sync-nonvalidatornode=true --sync-downloadheadersinfastsync=false --sync-downloadbodiesinfastsync=false --sync-downloadreceiptsinfastsync=false --sync-snapsyncaccountrangepartitioncount=48 --network-maxactivepeers=100 --history-pruning=Rolling --history-retentionepochs=82125 --pruning-mode=Hybrid --pruning-fullpruningtrigger=VolumeFreeSpace --pruning-fullpruningdisablelowprioritywrites=true --receipt-txlookuplimit=-1
+PodmanArgs=--stop-timeout=300
+
+[Service]
+Restart=always
+RestartSec=10
+TimeoutStartSec=15min
+TimeoutStopSec=6min
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target
