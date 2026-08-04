@@ -26,3 +26,6 @@ dashboard/test-results/
 cmd/ingestdump/
 dogfood-output/
 itest/
+
+# Agent working notes (local)
+NOTEPAD.md
