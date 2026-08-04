@@ -93,18 +93,16 @@ This creates `/run/xray` for the ingest socket (`/run/xray/xray.sock`).
 The Quadlet pulls from GHCR when the image is missing (`Pull=missing`):
 
 ```bash
-sudo podman pull ghcr.io/ethp2p/xray:728d16ac90fc
+sudo podman pull ghcr.io/ethp2p/xray:bf03ba6
 ```
 
 Images are published by GitHub Actions (`.github/workflows/publish-xray.yml`).
-Tags are the short git SHA (and `latest` on `main`). After the first push,
-set the GHCR package visibility to **public** under the ethp2p org packages
-settings if anonymous pulls fail.
+Tags are the short git SHA (and `latest` on `main`).
 
 To build locally instead:
 
 ```bash
-sudo podman build -t ghcr.io/ethp2p/xray:728d16ac90fc -f Dockerfile .
+sudo podman build -t ghcr.io/ethp2p/xray:bf03ba6 -f Dockerfile .
 ```
 
 Pinned tags, Prysm publishing, and Nethermind pins:

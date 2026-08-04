@@ -19,8 +19,8 @@ Xray uses a read-only root filesystem. Prysm and Nethermind use writable disposa
 | Component | Pin |
 |---|---|
 | Nethermind | `1.36.0`, linux/amd64 manifest `sha256:d915b29966286ec9ceee400c889e0b18fd4d84e7895402f3f4fa5750209c0a25`; local image ID `cdb9f10e374c729affe6945856aa322d38eda2a38eb9011e207d3f256ac72742` |
-| Prysm fork | `ghcr.io/ethp2p/xray-prysm:1fcc706ce4`, commit `1fcc706ce44eacd253ae3f5078995c5b3437e5fd` |
-| Xray | `ghcr.io/ethp2p/xray:728d16ac90fc`, commit `728d16ac90fc698d71136e3959f8270a0f85df28` |
+| Prysm fork | `ghcr.io/ethp2p/xray-prysm:1fcc706ce4`, commit `1fcc706ce44eacd253ae3f5078995c5b3437e5fd` (digest `sha256:f6851dc7ead5a8417167a00267a8f50472b67a8800e248e5e60e6e31de1658ee`) |
+| Xray | `ghcr.io/ethp2p/xray:bf03ba6`, commit `bf03ba6` (published digest `sha256:3cd8e905020837b180bf4a0d0e56c34535984dfcc7cc8d4ababae57ace1200fa`) |
 
 Quadlets use `Pull=missing` against those GHCR tags. Bump the tag in
 `infra/quadlet/*.container` when rolling a new image.
@@ -36,9 +36,6 @@ Workflows in this repo push to the GitHub Container Registry:
 
 Xray tags: short git SHA, semver from `v*` tags, and `latest` on `main`.
 Prysm tags: 10-char short SHA and full commit SHA of the built ref.
-
-After the first publish of each package, set visibility to **public** in the
-ethp2p org packages UI (or packages stay private to the org).
 
 ```bash
 # Manual dispatch examples
@@ -63,9 +60,9 @@ sudo podman build \
 Build Xray from this tree (or pull the published tag):
 
 ```bash
-sudo podman pull ghcr.io/ethp2p/xray:728d16ac90fc
+sudo podman pull ghcr.io/ethp2p/xray:bf03ba6
 # or:
-sudo podman build -t ghcr.io/ethp2p/xray:728d16ac90fc -f Dockerfile .
+sudo podman build -t ghcr.io/ethp2p/xray:bf03ba6 -f Dockerfile .
 ```
 
 Do not build with unrelated untracked files in the context.
