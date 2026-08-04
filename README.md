@@ -136,10 +136,10 @@ curl -fsS http://127.0.0.1:3500/eth/v1/node/syncing
 Open `http://127.0.0.1:9100`. A healthy stack shows a connected Prysm source
 in `/api/sources`.
 
-### Build from source
+## Build from source
 
-For local development without Podman (including macOS). Needs Go 1.25, CGO,
-a C compiler, SQLite headers, and Bun for the dashboard.
+For local development without Podman (including macOS). Needs Go 1.25, CGO
+(`github.com/mattn/go-sqlite3`), a C compiler, SQLite headers, and Bun.
 
 ```bash
 git clone https://github.com/ethp2p/xray.git
@@ -160,86 +160,16 @@ cd ..
   --static-dir=dashboard/dist
 ```
 
-Point an instrumented client at the ingest socket, or use the Quadlet stack
-above for a full node.
-
-### Docker Compose
-
-Legacy alternative that builds only the Xray backend + dashboard (no EL/CL).
-Prefer Quadlets on Linux hosts.
-
-```bash
-git clone https://github.com/ethp2p/xray.git
-cd xray
-export XRAY_DATA_DIR="$HOME/.xray/data"
-export XRAY_SOCK_DIR="$HOME/.xray/run"
-export XRAY_UID="$(id -u)"
-export XRAY_GID="$(id -g)"
-install -d "$XRAY_DATA_DIR" "$XRAY_SOCK_DIR"
-docker compose up --detach --build
-```
-
-Socket: `$XRAY_SOCK_DIR/xray.sock`.
-
-## Quick start
-
-### Run the backend during development
-
-Start the backend:
-
-```bash
-go build -o xray ./cmd/xray
-./xray --ingest=/tmp/xray.sock --listen=127.0.0.1:9100
-```
-
-The backend uses `github.com/mattn/go-sqlite3`, so local builds need CGO enabled
-and a working C compiler.
-
-Start the dashboard dev server:
+For dashboard hot reload, run the backend as above (omit `--static-dir`) and:
 
 ```bash
 cd dashboard && bun install && bun run dev
 ```
 
-Open `http://localhost:5173`. Vite proxies API requests to the backend on `:9100`.
+Open `http://localhost:5173`. Vite proxies API requests to `:9100`.
 
-### Integrate with Prysm
-
-The maintained Prysm integration is the
-[`ethp2p/prysm`](https://github.com/ethp2p/prysm) `xray` branch, pinned in
-the production deployment to commit
-`1fcc706ce44eacd253ae3f5078995c5b3437e5fd`.
-
-```go
-import "github.com/ethp2p/xray/probe"
-
-ih, err := probe.Wrap(h,
-    probe.WithIngestAddr("/tmp/xray.sock"),
-    probe.WithClientName("prysm"),
-    probe.WithWaitForAttach(),
-)
-```
-
-Build the fork, then pass the socket to `beacon-chain`:
-
-```bash
-git clone --branch xray https://github.com/ethp2p/prysm.git
-cd prysm
-go build -o ./bin/beacon-chain ./cmd/beacon-chain
-
-./bin/beacon-chain \
-  --accept-terms-of-use \
-  --mainnet \
-  --execution-endpoint=http://127.0.0.1:8551 \
-  --jwt-secret=/path/to/jwt.hex \
-  --datadir=/path/to/prysm-data \
-  --p2p-instrument-socket=/path/to/xray.sock \
-  --p2p-instrument-wait-for-attach
-```
-
-The fork also supports `--p2p-instrument-file` for a local protobuf trace.
-`--p2p-instrument-wait-for-attach` blocks Prysm startup until Xray connects;
-omit it if instrumentation must not hold up the node.
+Point an instrumented client at the ingest socket. For a full node, use the
+Quadlet install above (`ghcr.io/ethp2p/xray-prysm:stable`).
 
 ## Project structure
 
@@ -282,7 +212,11 @@ ih, err := probe.Wrap(host,
 defer ih.Close()
 ```
 
-`probe.Wrap` returns a `*probe.Host` that satisfies `host.Host`. Existing code works unchanged; all stream reads/writes are intercepted and forwarded. The root import `github.com/ethp2p/xray` still re-exports this surface (including deprecated `Wiretap`) for Prysm `@1fcc706ce`.
+`probe.Wrap` returns a `*probe.Host` that satisfies `host.Host`. Existing code
+works unchanged; all stream reads/writes are intercepted and forwarded. The
+root import `github.com/ethp2p/xray` still re-exports this surface (including
+deprecated `Wiretap`) for the instrumented
+[`ethp2p/prysm`](https://github.com/ethp2p/prysm) fork.
 
 ## Configuration
 
