@@ -1,18 +1,21 @@
 # Xray
 
-Real-time analysis of network utilization of Ethereum Consensus Layer nodes.
+Real-time bandwidth usage profiler for the Ethereum Consensus Layer, with:
+
+- per-object, per-flow, per-slot traffic attribution, e.g. attestations, aggregates, blocks, blobs, etc.
+- spill-over traffic analysis, e.g. objects from slot N-1 that continue propagating in slot N
 
 **Live dashboard**: [xray.ethp2p.dev](https://xray.ethp2p.dev)
 
 ## How it works
 
-Xray wraps the libp2p Host to capture stream-level traffic without modifying application code.
+Xray comprises two components: the client-side **probe** and the **collector** backend.
 
-A separate backend process decodes gossipsub messages, extracts SSZ slot numbers, and aggregates per-slot bandwidth breakdowns.
+**Xray probe:** wraps the libp2p `Host`, intercepts every `Read`/`Write` on every stream, and forwards raw byte chunks over a lightweight ingest protocol to the backend over a local socket. The probe has no Ethereum-specific logic: it sends opaque bytes.
 
-A Solid.js dashboard ("Ethereum Xray") renders the data in real time.
+**Xray backend:** is a standalone binary (`cmd/xray`). It accepts probe connections, reassembles gossipsub RPC frames, decodes SSZ payloads to extract slot numbers and block metadata, then aggregates traffic into 100ms time buckets per slot. It serves a REST + WebSocket API for the dashboard and persists finalized slots and source metadata to SQLite.
 
-## Architecture
+Here's an architecture diagram:
 
 ```
 ┌───────────────────────────────────────────────────────────────┐
@@ -36,8 +39,8 @@ A Solid.js dashboard ("Ethereum Xray") renders the data in real time.
 │  │ listener │  │ (per-src) │  │ (SQLite) │  │ server     │  │
 │  └──────────┘  └───────────┘  └──────────┘  └─────┬──────┘  │
 │                                                   │         │
-│  gossipsub/ --- RPC parser                        │         │
-│  eth/ ────────- SSZ decoder, slot clock           │         │
+│  internal/gossipsub --- RPC parser                │         │
+│  internal/eth ───────── SSZ decoder, slot clock   │         │
 └───────────────────────────────────────────────────┼─────────┘
                                                     │
                                             ┌───────v─────────┐
@@ -46,44 +49,110 @@ A Solid.js dashboard ("Ethereum Xray") renders the data in real time.
                                             └─────────────────┘
 ```
 
-The **producer library** is what clients embed. It wraps the libp2p `Host`, intercepts every `Read`/`Write` on every stream, and forwards raw byte chunks over a lightweight ingest protocol to the backend. The probe has no Ethereum-specific logic; it sends opaque bytes.
-
-The **backend** is a standalone binary (`cmd/xray`). It accepts probe connections, reassembles gossipsub RPC frames, decodes SSZ payloads to extract slot numbers and block metadata, then aggregates traffic into 100ms time buckets per slot. It serves a REST + WebSocket API for the dashboard and persists finalized slots and source metadata to SQLite.
-
-The **dashboard** is a Solid.js single-page app that connects to the backend over WebSocket for live slot updates and REST for historical data.
-
 ## Installation
 
-### Docker Compose
+The supported install path is **Podman Quadlets** under systemd. Units live
+in `infra/quadlet/`; the shared ingest socket is created by
+`infra/tmpfiles/xray.conf`.
 
-Docker Compose is the quickest way to install the Xray backend and dashboard.
-You need Git and a current Docker installation with Compose.
+### 0. Prerequisites
+
+| Requirement | Notes |
+| --- | --- |
+| Linux host with systemd | Quadlets are systemd generators; not for macOS/Windows hosts directly |
+| Podman 4.9+ | Rootful Podman for system Quadlets under `/etc/containers/systemd` |
+| Git | Clone this repository |
+| uid/gid `1000` | Units run as `User=1000` / `Group=1000`; `/run/xray` is `0770 1000:1000` |
+| Xray container image | Build or import before `systemctl start` (see below) |
+| JWT file (full stack only) | Engine API secret for Nethermind ↔ Prysm |
+
+Optional full stack also needs disk for Nethermind (`/data/nethermind`) and
+Prysm (`/data/.eth2`), plus a host JWT at the path you pass to
+`podman secret create`.
+
+Clone once:
 
 ```bash
 git clone https://github.com/ethp2p/xray.git
 cd xray
-
-export XRAY_DATA_DIR="$HOME/.xray/data"
-export XRAY_SOCK_DIR="$HOME/.xray/run"
-export XRAY_UID="$(id -u)"
-export XRAY_GID="$(id -g)"
-install -d "$XRAY_DATA_DIR" "$XRAY_SOCK_DIR"
-
-docker compose up --detach --build
 ```
 
-Open `http://127.0.0.1:9100`. Compose publishes the dashboard only on
-loopback. Put a local reverse proxy or tunnel in front of it if remote users
-need access.
+### 1. Install Podman and the runtime directory
 
-The backend creates its ingest socket at `$XRAY_SOCK_DIR/xray.sock` on the
-host. Configure the instrumented client to use that path. Stop Xray with
-`docker compose down`. Its SQLite data remains in `$XRAY_DATA_DIR`.
+```bash
+sudo apt-get update
+sudo apt-get install --yes podman
+sudo install -m 0644 infra/tmpfiles/xray.conf /etc/tmpfiles.d/xray.conf
+sudo systemd-tmpfiles --create /etc/tmpfiles.d/xray.conf
+```
+
+This creates `/run/xray` for the ingest socket (`/run/xray/xray.sock`).
+
+### 2. Build or import the Xray image
+
+The Quadlet pins a local tag (`Pull=never`). Build from this tree:
+
+```bash
+sudo podman build -t localhost/ethp2p/xray:728d16ac90fc -f Dockerfile .
+```
+
+Or import a pre-built image and tag it to match `infra/quadlet/xray.container`.
+Pinned digests and Prysm/Nethermind image builds:
+[`infra/README.md`](infra/README.md).
+
+Prepare the data directory expected by the unit:
+
+```bash
+sudo install -d -o 1000 -g 1000 -m 0750 /home/ubuntu/.xray/data
+```
+
+Adjust the `Volume=` path in `infra/quadlet/xray.container` if your host
+layout differs from raptor (`/home/ubuntu/.xray/data`).
+
+### 3. Install the Xray Quadlet
+
+```bash
+sudo install -d -m 0755 /etc/containers/systemd
+sudo install -m 0644 infra/quadlet/xray.container /etc/containers/systemd/
+sudo env QUADLET_UNIT_DIRS=/etc/containers/systemd \
+  /usr/lib/systemd/system-generators/podman-system-generator --dryrun
+sudo systemctl daemon-reload
+sudo systemctl start xray.service
+```
+
+Open `http://127.0.0.1:9100`. Point an instrumented client at
+`/run/xray/xray.sock` (for example Prysm
+`--p2p-instrument-socket=/run/xray/xray.sock`).
+
+```bash
+systemctl --no-pager --full status xray.service
+curl -fsS http://127.0.0.1:9100/api/sources
+```
+
+### 4. Optional: full stack (Nethermind + Prysm + Xray)
+
+Install the remaining Quadlets and the Engine JWT secret:
+
+```bash
+sudo podman secret create eth-jwt /path/to/jwt.hex
+sudo install -m 0644 infra/quadlet/nethermind.container \
+  infra/quadlet/prysm.container /etc/containers/systemd/
+sudo systemctl daemon-reload
+sudo systemctl start nethermind.service
+sudo systemctl start xray.service
+sudo systemctl start prysm.service
+```
+
+Prysm waits on Xray via `--p2p-instrument-wait-for-attach` and the shared
+socket. Loopback ports: Xray `:9100`, Nethermind JSON-RPC `:8545`, Prysm
+API `:3500`.
+
+Verification, upgrades, and rollback: [`infra/README.md`](infra/README.md).
 
 ### Build from source
 
-Source builds need Go 1.25, CGO, a C compiler, and the SQLite development
-headers. Building the dashboard also needs Bun.
+For local development without Podman (including macOS). Needs Go 1.25, CGO,
+a C compiler, SQLite headers, and Bun for the dashboard.
 
 ```bash
 git clone https://github.com/ethp2p/xray.git
@@ -104,21 +173,22 @@ cd ..
   --static-dir=dashboard/dist
 ```
 
-### Install the production stack
+### Docker Compose
 
-The `infra/` directory defines the production stack as Podman Quadlets
-managed by systemd:
+Legacy alternative if you already use Docker and only need the Xray
+backend + dashboard (not the EL/CL Quadlets):
 
-- Nethermind execution client
-- the instrumented Prysm fork
-- Xray backend and dashboard
-- the shared runtime socket directory
+```bash
+export XRAY_DATA_DIR="$HOME/.xray/data"
+export XRAY_SOCK_DIR="$HOME/.xray/run"
+export XRAY_UID="$(id -u)"
+export XRAY_GID="$(id -g)"
+install -d "$XRAY_DATA_DIR" "$XRAY_SOCK_DIR"
+docker compose up --detach --build
+```
 
-See [`infra/README.md`](infra/README.md) for pinned versions, image builds,
-installation, rollout, verification, upgrades, and rollback. The checked-in
-deployment targets Podman 4.9 on Ubuntu and keeps the JSON-RPC, Engine,
-Prysm API, and Xray dashboard ports on loopback.
-
+Socket: `$XRAY_SOCK_DIR/xray.sock`. Prefer the Quadlet path above when
+installing on a Linux host.
 ## Quick start
 
 ### Run the backend during development
