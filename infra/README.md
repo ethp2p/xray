@@ -19,7 +19,7 @@ Xray uses a read-only root filesystem. Prysm and Nethermind use writable disposa
 | Component | Pin |
 |---|---|
 | Nethermind | `1.36.0`, linux/amd64 manifest `sha256:d915b29966286ec9ceee400c889e0b18fd4d84e7895402f3f4fa5750209c0a25`; local image ID `cdb9f10e374c729affe6945856aa322d38eda2a38eb9011e207d3f256ac72742` |
-| Prysm fork | `ghcr.io/ethp2p/prysm:1fcc706ce4`, commit `1fcc706ce44eacd253ae3f5078995c5b3437e5fd` |
+| Prysm fork | `ghcr.io/ethp2p/xray-prysm:1fcc706ce4`, commit `1fcc706ce44eacd253ae3f5078995c5b3437e5fd` |
 | Xray | `ghcr.io/ethp2p/xray:728d16ac90fc`, commit `728d16ac90fc698d71136e3959f8270a0f85df28` |
 
 Quadlets use `Pull=missing` against those GHCR tags. Bump the tag in
@@ -32,7 +32,7 @@ Workflows in this repo push to the GitHub Container Registry:
 | Workflow | Image | Trigger |
 | --- | --- | --- |
 | `.github/workflows/publish-xray.yml` | `ghcr.io/ethp2p/xray` | push to `main`, `v*` tags, or manual |
-| `.github/workflows/publish-prysm.yml` | `ghcr.io/ethp2p/prysm` | manual (`prysm_ref` input; default `1fcc706ce…`) |
+| `.github/workflows/publish-xray-prysm.yml` | `ghcr.io/ethp2p/xray-prysm` | manual (`prysm_ref` input; default `1fcc706ce…`) |
 
 Xray tags: short git SHA, semver from `v*` tags, and `latest` on `main`.
 Prysm tags: 10-char short SHA and full commit SHA of the built ref.
@@ -43,7 +43,7 @@ ethp2p org packages UI (or packages stay private to the org).
 ```bash
 # Manual dispatch examples
 gh workflow run publish-xray.yml --repo ethp2p/xray
-gh workflow run publish-prysm.yml --repo ethp2p/xray \
+gh workflow run publish-xray-prysm.yml --repo ethp2p/xray \
   -f prysm_ref=1fcc706ce44eacd253ae3f5078995c5b3437e5fd
 ```
 
@@ -56,7 +56,7 @@ build_dir=$(mktemp -d)
 git -C /home/ubuntu/prysm archive 1fcc706ce44eacd253ae3f5078995c5b3437e5fd | tar -x -C "$build_dir"
 sudo podman build \
   --file /home/ubuntu/xray/infra/images/prysm.Containerfile \
-  --tag ghcr.io/ethp2p/prysm:1fcc706ce4 \
+  --tag ghcr.io/ethp2p/xray-prysm:1fcc706ce4 \
   "$build_dir"
 ```
 

@@ -1,6 +1,6 @@
 # Build the instrumented Prysm image from ethp2p/prysm and publish to GHCR.
 # Uses infra/images/prysm.Containerfile from this repository.
-name: Publish Prysm image
+name: Publish Xray-Prysm image
 
 on:
   workflow_dispatch:
@@ -12,7 +12,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ethp2p/prysm
+  IMAGE_NAME: ethp2p/xray-prysm
 
 jobs:
   build-and-push:
@@ -59,3 +59,4 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/ethp2p/prysm
             org.opencontainers.image.revision=${{ steps.tag.outputs.sha }}
+            org.opencontainers.image.description=Prysm beacon-chain instrumented for ethp2p/xray

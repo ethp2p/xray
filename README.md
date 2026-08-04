@@ -141,11 +141,11 @@ curl -fsS http://127.0.0.1:9100/api/sources
 ### 4. Optional: full stack (Nethermind + Prysm + Xray)
 
 Pull the instrumented Prysm image (published via
-`.github/workflows/publish-prysm.yml`), then install the remaining Quadlets
-and the Engine JWT secret:
+`.github/workflows/publish-xray-prysm.yml`), then install the remaining
+Quadlets and the Engine JWT secret:
 
 ```bash
-sudo podman pull ghcr.io/ethp2p/prysm:1fcc706ce4
+sudo podman pull ghcr.io/ethp2p/xray-prysm:1fcc706ce4
 sudo podman secret create eth-jwt /path/to/jwt.hex
 sudo install -m 0644 infra/quadlet/nethermind.container \
   infra/quadlet/prysm.container /etc/containers/systemd/
