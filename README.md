@@ -51,112 +51,90 @@ Here's an architecture diagram:
 
 ## Installation
 
-The supported install path is **Podman Quadlets** under systemd. Units live
-in `infra/quadlet/`; the shared ingest socket is created by
-`infra/tmpfiles/xray.conf`.
+The supported install is the **full stack** on Linux: Nethermind, instrumented
+Prysm, and Xray, managed as Podman Quadlets under systemd. Unit files are
+fetched from the release tag; no repository clone is required.
 
-### 0. Prerequisites
+Upgrades, rollback, and image publishing: [`infra/README.md`](infra/README.md).
+
+### Prerequisites
 
 | Requirement | Notes |
 | --- | --- |
-| Linux host with systemd | Quadlets are systemd generators; not for macOS/Windows hosts directly |
-| Podman 4.9+ | Rootful Podman for system Quadlets under `/etc/containers/systemd` |
-| Git | Clone this repository |
-| uid/gid `1000` | Units run as `User=1000` / `Group=1000`; `/run/xray` is `0770 1000:1000` |
-| Xray container image | Pull from GHCR or build locally (see below) |
-| JWT file (full stack only) | Engine API secret for Nethermind ↔ Prysm |
+| Linux host with systemd | Quadlets are systemd generators |
+| Podman 4.9+ | Rootful Podman; units under `/etc/containers/systemd` |
+| uid/gid `1000` | All three units run as `User=1000` / `Group=1000` |
+| Disk | `/data/nethermind`, `/data/.eth2`, and the Xray data dir (default `/home/ubuntu/.xray/data`) |
+| Engine JWT file | Shared secret for Nethermind ↔ Prysm (`podman secret create`) |
 
-Optional full stack also needs disk for Nethermind (`/data/nethermind`) and
-Prysm (`/data/.eth2`), plus a host JWT at the path you pass to
-`podman secret create`.
-
-Clone once:
+### Prepare
 
 ```bash
-git clone https://github.com/ethp2p/xray.git
-cd xray
-```
+REF=v0.1.0
+BASE=https://raw.githubusercontent.com/ethp2p/xray/${REF}
 
-### 1. Install Podman and the runtime directory
-
-```bash
 sudo apt-get update
 sudo apt-get install --yes podman
-sudo install -m 0644 infra/tmpfiles/xray.conf /etc/tmpfiles.d/xray.conf
+
+curl -fsSL "$BASE/infra/tmpfiles/xray.conf" \
+  | sudo tee /etc/tmpfiles.d/xray.conf >/dev/null
 sudo systemd-tmpfiles --create /etc/tmpfiles.d/xray.conf
-```
 
-This creates `/run/xray` for the ingest socket (`/run/xray/xray.sock`).
+sudo install -d -o 1000 -g 1000 -m 0750 \
+  /data/nethermind /data/.eth2 /home/ubuntu/.xray/data
 
-### 2. Pull (or build) the Xray image
-
-Images are on GHCR. The Quadlet pin is the release tag in
-`infra/quadlet/xray.container` (`Pull=missing`):
-
-```bash
 sudo podman pull ghcr.io/ethp2p/xray:0.1.0
+sudo podman pull ghcr.io/ethp2p/xray-prysm:stable
+sudo podman pull \
+  docker.io/nethermind/nethermind@sha256:d915b29966286ec9ceee400c889e0b18fd4d84e7895402f3f4fa5750209c0a25
+
+sudo podman secret create eth-jwt /path/to/jwt.hex
 ```
 
-Release tags come from git tags (`v0.1.0` → image `0.1.0`). Every push to
-`main` also refreshes `latest`. Details:
-[`infra/README.md`](infra/README.md).
+`/run/xray` holds the ingest socket (`xray.sock`). Edit the Xray `Volume=`
+path in the unit before install if your data dir is not
+`/home/ubuntu/.xray/data`.
 
-To build locally instead:
-
-```bash
-sudo podman build -t ghcr.io/ethp2p/xray:0.1.0 -f Dockerfile .
-```
-
-Prepare the data directory expected by the unit:
+### Install
 
 ```bash
-sudo install -d -o 1000 -g 1000 -m 0750 /home/ubuntu/.xray/data
-```
+REF=v0.1.0
+BASE=https://raw.githubusercontent.com/ethp2p/xray/${REF}
 
-Adjust the `Volume=` path in `infra/quadlet/xray.container` if your host
-layout differs from raptor (`/home/ubuntu/.xray/data`).
-
-### 3. Install the Xray Quadlet
-
-```bash
 sudo install -d -m 0755 /etc/containers/systemd
-sudo install -m 0644 infra/quadlet/xray.container /etc/containers/systemd/
+for unit in nethermind.container xray.container prysm.container; do
+  curl -fsSL "$BASE/infra/quadlet/${unit}" \
+    | sudo tee "/etc/containers/systemd/${unit}" >/dev/null
+done
+
 sudo env QUADLET_UNIT_DIRS=/etc/containers/systemd \
   /usr/lib/systemd/system-generators/podman-system-generator --dryrun
 sudo systemctl daemon-reload
-sudo systemctl start xray.service
 ```
 
-Open `http://127.0.0.1:9100`. Point an instrumented client at
-`/run/xray/xray.sock` (for example Prysm
-`--p2p-instrument-socket=/run/xray/xray.sock`).
+### Start
 
 ```bash
-systemctl --no-pager --full status xray.service
-curl -fsS http://127.0.0.1:9100/api/sources
-```
-
-### 4. Optional: full stack (Nethermind + Prysm + Xray)
-
-Pull the instrumented Prysm image (`stable` is the supported floating tag),
-then install the remaining Quadlets and the Engine JWT secret:
-
-```bash
-sudo podman pull ghcr.io/ethp2p/xray-prysm:stable
-sudo podman secret create eth-jwt /path/to/jwt.hex
-sudo install -m 0644 infra/quadlet/nethermind.container \
-  infra/quadlet/prysm.container /etc/containers/systemd/
-sudo systemctl daemon-reload
 sudo systemctl start nethermind.service
 sudo systemctl start xray.service
 sudo systemctl start prysm.service
 ```
 
-Prysm waits on Xray via `--p2p-instrument-wait-for-attach` and the shared
-socket. Loopback ports: Xray `:9100`, Nethermind JSON-RPC `:8545`, Prysm
-API `:3500`.
+Prysm waits for Xray on `/run/xray/xray.sock`
+(`--p2p-instrument-wait-for-attach`). Loopback ports: Xray `:9100`,
+Nethermind JSON-RPC `:8545`, Prysm API `:3500`.
 
-Verification, upgrades, and rollback: [`infra/README.md`](infra/README.md).
+### Verify
+
+```bash
+systemctl --no-pager --full status \
+  nethermind.service xray.service prysm.service
+curl -fsS http://127.0.0.1:9100/api/sources
+curl -fsS http://127.0.0.1:3500/eth/v1/node/syncing
+```
+
+Open `http://127.0.0.1:9100`. A healthy stack shows a connected Prysm source
+in `/api/sources`.
 
 ### Build from source
 
@@ -182,12 +160,17 @@ cd ..
   --static-dir=dashboard/dist
 ```
 
+Point an instrumented client at the ingest socket, or use the Quadlet stack
+above for a full node.
+
 ### Docker Compose
 
-Legacy alternative if you already use Docker and only need the Xray
-backend + dashboard (not the EL/CL Quadlets):
+Legacy alternative that builds only the Xray backend + dashboard (no EL/CL).
+Prefer Quadlets on Linux hosts.
 
 ```bash
+git clone https://github.com/ethp2p/xray.git
+cd xray
 export XRAY_DATA_DIR="$HOME/.xray/data"
 export XRAY_SOCK_DIR="$HOME/.xray/run"
 export XRAY_UID="$(id -u)"
@@ -196,8 +179,7 @@ install -d "$XRAY_DATA_DIR" "$XRAY_SOCK_DIR"
 docker compose up --detach --build
 ```
 
-Socket: `$XRAY_SOCK_DIR/xray.sock`. Prefer the Quadlet path above when
-installing on a Linux host.
+Socket: `$XRAY_SOCK_DIR/xray.sock`.
 
 ## Quick start
 
