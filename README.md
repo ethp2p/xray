@@ -90,23 +90,22 @@ This creates `/run/xray` for the ingest socket (`/run/xray/xray.sock`).
 
 ### 2. Pull (or build) the Xray image
 
-The Quadlet pulls from GHCR when the image is missing (`Pull=missing`):
+Images are on GHCR. The Quadlet pin is the release tag in
+`infra/quadlet/xray.container` (`Pull=missing`):
 
 ```bash
-sudo podman pull ghcr.io/ethp2p/xray:bf03ba6
+sudo podman pull ghcr.io/ethp2p/xray:0.1.0
 ```
 
-Images are published by GitHub Actions (`.github/workflows/publish-xray.yml`).
-Tags are the short git SHA (and `latest` on `main`).
+Release tags come from git tags (`v0.1.0` → image `0.1.0`). Every push to
+`main` also refreshes `latest`. Details:
+[`infra/README.md`](infra/README.md).
 
 To build locally instead:
 
 ```bash
-sudo podman build -t ghcr.io/ethp2p/xray:bf03ba6 -f Dockerfile .
+sudo podman build -t ghcr.io/ethp2p/xray:0.1.0 -f Dockerfile .
 ```
-
-Pinned tags, Prysm publishing, and Nethermind pins:
-[`infra/README.md`](infra/README.md).
 
 Prepare the data directory expected by the unit:
 
@@ -116,6 +115,7 @@ sudo install -d -o 1000 -g 1000 -m 0750 /home/ubuntu/.xray/data
 
 Adjust the `Volume=` path in `infra/quadlet/xray.container` if your host
 layout differs from raptor (`/home/ubuntu/.xray/data`).
+
 ### 3. Install the Xray Quadlet
 
 ```bash
@@ -138,12 +138,11 @@ curl -fsS http://127.0.0.1:9100/api/sources
 
 ### 4. Optional: full stack (Nethermind + Prysm + Xray)
 
-Pull the instrumented Prysm image (published via
-`.github/workflows/publish-xray-prysm.yml`), then install the remaining
-Quadlets and the Engine JWT secret:
+Pull the instrumented Prysm image (`stable` is the supported floating tag),
+then install the remaining Quadlets and the Engine JWT secret:
 
 ```bash
-sudo podman pull ghcr.io/ethp2p/xray-prysm:1fcc706ce4
+sudo podman pull ghcr.io/ethp2p/xray-prysm:stable
 sudo podman secret create eth-jwt /path/to/jwt.hex
 sudo install -m 0644 infra/quadlet/nethermind.container \
   infra/quadlet/prysm.container /etc/containers/systemd/
@@ -199,6 +198,7 @@ docker compose up --detach --build
 
 Socket: `$XRAY_SOCK_DIR/xray.sock`. Prefer the Quadlet path above when
 installing on a Linux host.
+
 ## Quick start
 
 ### Run the backend during development

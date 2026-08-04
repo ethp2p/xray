@@ -14,16 +14,16 @@ The services share no container lifecycle. Prysm starts after Nethermind and Xra
 
 Xray uses a read-only root filesystem. Prysm and Nethermind use writable disposable image overlays because Podman 4.9 cannot create their JWT secret mountpoint after applying a read-only root. Their persistent state remains limited to the explicit host bind mounts.
 
-## Pinned inputs
+## Image tags
 
-| Component | Pin |
-|---|---|
-| Nethermind | `1.36.0`, linux/amd64 manifest `sha256:d915b29966286ec9ceee400c889e0b18fd4d84e7895402f3f4fa5750209c0a25`; local image ID `cdb9f10e374c729affe6945856aa322d38eda2a38eb9011e207d3f256ac72742` |
-| Prysm fork | `ghcr.io/ethp2p/xray-prysm:1fcc706ce4`, commit `1fcc706ce44eacd253ae3f5078995c5b3437e5fd` (digest `sha256:f6851dc7ead5a8417167a00267a8f50472b67a8800e248e5e60e6e31de1658ee`) |
-| Xray | `ghcr.io/ethp2p/xray:bf03ba6`, commit `bf03ba6` (published digest `sha256:3cd8e905020837b180bf4a0d0e56c34535984dfcc7cc8d4ababae57ace1200fa`) |
+| Component | Quadlet tag | Notes |
+|---|---|---|
+| Xray | `ghcr.io/ethp2p/xray:0.1.0` | Semver from git tag `v0.1.0`. Also published: `latest` (tip of `main`), short SHA |
+| Prysm fork | `ghcr.io/ethp2p/xray-prysm:stable` | Floating supported pin. Also published: `latest`, short SHA, full SHA |
+| Nethermind | digest pin in `nethermind.container` | `1.36.0` linux/amd64 `sha256:d915b29966286ec9ceee400c889e0b18fd4d84e7895402f3f4fa5750209c0a25` |
 
-Quadlets use `Pull=missing` against those GHCR tags. Bump the tag in
-`infra/quadlet/*.container` when rolling a new image.
+Quadlets use `Pull=missing`. Bump the Xray semver in `xray.container` when
+cutting a release; retag Prysm `stable` by re-running the publish workflow.
 
 ## Publish images (GHCR)
 
@@ -34,12 +34,12 @@ Workflows in this repo push to the GitHub Container Registry:
 | `.github/workflows/publish-xray.yml` | `ghcr.io/ethp2p/xray` | push to `main`, `v*` tags, or manual |
 | `.github/workflows/publish-xray-prysm.yml` | `ghcr.io/ethp2p/xray-prysm` | manual (`prysm_ref` input; default `1fcc706ce…`) |
 
-Xray tags: short git SHA, semver from `v*` tags, and `latest` on `main`.
-Prysm tags: 10-char short SHA and full commit SHA of the built ref.
-
 ```bash
-# Manual dispatch examples
-gh workflow run publish-xray.yml --repo ethp2p/xray
+# Cut an Xray release (publishes :0.1.0, :0.1, short SHA; :latest stays tip of main)
+git tag v0.1.0
+git push origin v0.1.0
+
+# Refresh Prysm :stable / :latest from a prysm commit
 gh workflow run publish-xray-prysm.yml --repo ethp2p/xray \
   -f prysm_ref=1fcc706ce44eacd253ae3f5078995c5b3437e5fd
 ```
@@ -53,16 +53,16 @@ build_dir=$(mktemp -d)
 git -C /home/ubuntu/prysm archive 1fcc706ce44eacd253ae3f5078995c5b3437e5fd | tar -x -C "$build_dir"
 sudo podman build \
   --file /home/ubuntu/xray/infra/images/prysm.Containerfile \
-  --tag ghcr.io/ethp2p/xray-prysm:1fcc706ce4 \
+  --tag ghcr.io/ethp2p/xray-prysm:stable \
   "$build_dir"
 ```
 
 Build Xray from this tree (or pull the published tag):
 
 ```bash
-sudo podman pull ghcr.io/ethp2p/xray:bf03ba6
+sudo podman pull ghcr.io/ethp2p/xray:0.1.0
 # or:
-sudo podman build -t ghcr.io/ethp2p/xray:bf03ba6 -f Dockerfile .
+sudo podman build -t ghcr.io/ethp2p/xray:0.1.0 -f Dockerfile .
 ```
 
 Do not build with unrelated untracked files in the context.
@@ -124,13 +124,15 @@ The rollout does not delete the native binaries, tmux sessions, Docker image, Do
 
 ## Upgrade policy
 
-1. Update one image digest or source commit in a reviewed change.
-2. Build or pull the new image before touching the running service.
-3. Restart only that service.
-4. Check sync distance, peer count, Xray source connection, and logs.
-5. Keep the prior image until the next successful upgrade.
+1. For Xray: cut a new `v*` tag, bump `Image=` in `xray.container`, pull, restart.
+2. For Prysm: re-publish so `:stable` moves, pull `ghcr.io/ethp2p/xray-prysm:stable`, restart.
+3. For Nethermind: bump the digest pin in `nethermind.container` in a reviewed change.
+4. Restart only the service you changed.
+5. Check sync distance, peer count, Xray source connection, and logs.
+6. Keep the prior image until the next successful upgrade.
 
-Do not enable registry auto-update for these stateful clients.
+Do not enable registry auto-update for these stateful clients (`Pull=missing`
+is intentional).
 
 ## Rollout checks recorded on raptor
 

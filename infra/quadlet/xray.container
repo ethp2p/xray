@@ -4,7 +4,7 @@ Wants=network-online.target
 After=network-online.target
 
 [Container]
-Image=ghcr.io/ethp2p/xray:bf03ba6
+Image=ghcr.io/ethp2p/xray:0.1.0
 Pull=missing
 ContainerName=ethp2p-xray
 User=1000

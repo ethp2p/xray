@@ -5,7 +5,7 @@ Wants=nethermind.service xray.service
 After=nethermind.service xray.service
 
 [Container]
-Image=ghcr.io/ethp2p/xray-prysm:1fcc706ce4
+Image=ghcr.io/ethp2p/xray-prysm:stable
 Pull=missing
 ContainerName=ethp2p-prysm
 Network=host

@@ -56,6 +56,8 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.short }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:stable
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           labels: |
             org.opencontainers.image.source=https://github.com/ethp2p/prysm
             org.opencontainers.image.revision=${{ steps.tag.outputs.sha }}
