@@ -20,7 +20,7 @@ A Solid.js dashboard ("Ethereum Xray") renders the data in real time.
 │                  (Prysm, Lighthouse, etc.)                    │
 │                                                               │
 │  ┌─────────────────────────────────────────────────────────┐  │
-│  │                 xray producer library                   │  │
+│  │              probe SDK (github.com/ethp2p/xray/probe)   │  │
 │  │  Wraps libp2p Host, intercepts streams/connections      │  │
 │  │  Forwards raw bytes via ingest protocol                 │  │
 │  └──────────────────────┬──────────────────────────────────┘  │
@@ -149,12 +149,12 @@ the production deployment to commit
 `1fcc706ce44eacd253ae3f5078995c5b3437e5fd`.
 
 ```go
-import "github.com/ethp2p/xray"
+import "github.com/ethp2p/xray/probe"
 
-ih, err := xray.Wrap(h,
-    xray.WithIngestAddr("/tmp/xray.sock"),
-    xray.WithClientName("prysm"),
-    xray.WithWaitForAttach(),
+ih, err := probe.Wrap(h,
+    probe.WithIngestAddr("/tmp/xray.sock"),
+    probe.WithClientName("prysm"),
+    probe.WithWaitForAttach(),
 )
 ```
 
@@ -182,9 +182,11 @@ omit it if instrumentation must not hold up the node.
 ## Project structure
 
 ```
-*.go                    Producer SDK (host wrapper, sinks, emitter) at module root
+probe/                  Producer SDK (host wrapper, sinks, emitter)
+*.go                    Deprecated root compat shim (re-exports probe)
 api/                    Shared JSON DTOs for REST/WebSocket responses
 cmd/xray/               Backend binary entrypoint
+internal/decode/        Stream-decode types shared by gossipsub and processor
 internal/eth/           Ethereum slot clock and SSZ extraction
 internal/gossipsub/     Gossipsub RPC parser
 internal/ingest/        Probe connection listener and ingest sessions
@@ -206,25 +208,19 @@ infra/                  Podman Quadlets and production deployment runbook
 The probe wraps a `go-libp2p` host transparently:
 
 ```go
-import "github.com/ethp2p/xray"
+import "github.com/ethp2p/xray/probe"
 
 host, _ := libp2p.New(...)
-ih, err := xray.Wrap(host,
-    xray.WithIngestAddr("/tmp/xray.sock"),
-    xray.WithClientName("my-client/v1.0"),
-    xray.WithWaitForAttach(),                    // block until backend connects
-    xray.WithSinkFile("/var/log/xray.trace"),    // optional local trace file
-    xray.WithDecoder(gossipsub.Decoder{}.Match, gossipsub.Decoder{}.New),
-    xray.WithOnMessage(func(streamID uint32, protocol string) xray.OnMessage {
-        return func(msg xray.DecodedMessage) {
-            // handle decoded messages off the hot path
-        }
-    }),
+ih, err := probe.Wrap(host,
+    probe.WithIngestAddr("/tmp/xray.sock"),
+    probe.WithClientName("my-client/v1.0"),
+    probe.WithWaitForAttach(),                    // block until backend connects
+    probe.WithSinkFile("/var/log/xray.trace"),    // optional local trace file
 )
 defer ih.Close()
 ```
 
-`xray.Wrap` returns a `*xray.Host` that satisfies `host.Host`. Existing code works unchanged; all stream reads/writes are intercepted and forwarded.
+`probe.Wrap` returns a `*probe.Host` that satisfies `host.Host`. Existing code works unchanged; all stream reads/writes are intercepted and forwarded. The root import `github.com/ethp2p/xray` still re-exports this surface (including deprecated `Wiretap`) for Prysm `@1fcc706ce`.
 
 ## Configuration
 

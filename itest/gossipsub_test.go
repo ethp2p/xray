@@ -14,8 +14,9 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-msgio/protoio"
 
-	"github.com/ethp2p/xray"
+	"github.com/ethp2p/xray/internal/decode"
 	"github.com/ethp2p/xray/internal/gossipsub"
+	"github.com/ethp2p/xray/probe"
 	xraypb "github.com/ethp2p/xray/proto/xray"
 	pspb "github.com/libp2p/go-libp2p-pubsub/pb"
 )
@@ -23,8 +24,7 @@ import (
 func TestGossipSub_TopicTagging(t *testing.T) {
 	ctx := t.Context()
 
-	tagCollector := newTagCollector()
-	host1, host2, sink1, sink2 := setupTwoHostsWithPubsub(t, ctx, tagCollector)
+	host1, host2, sink1, sink2 := setupTwoHostsWithPubsub(t, ctx)
 	defer host1.Close()
 	defer host2.Close()
 
@@ -106,7 +106,6 @@ func TestGossipSub_TopicTagging(t *testing.T) {
 
 	time.Sleep(200 * time.Millisecond)
 
-	// Traffic events still carry byte counts (tagless)
 	var totalBytes uint64
 	for _, sink := range []*testSink{sink1, sink2} {
 		for _, evt := range sink.Events() {
@@ -119,21 +118,19 @@ func TestGossipSub_TopicTagging(t *testing.T) {
 		t.Error("no traffic events recorded")
 	}
 
-	// Topics arrive via the async decode pipeline to OnMessage handlers
-	topics := tagCollector.Topics()
+	topics := topicsFromSinks(sink1, sink2)
 	if _, ok := topics["topic-a"]; !ok {
-		t.Error("topic-a not found in decoded messages")
+		t.Error("topic-a not found in decoded stream chunks")
 	}
 	if _, ok := topics["topic-b"]; !ok {
-		t.Error("topic-b not found in decoded messages")
+		t.Error("topic-b not found in decoded stream chunks")
 	}
 }
 
 func TestGossipSub_PartialFrameHandling(t *testing.T) {
 	ctx := t.Context()
 
-	tagCollector := newTagCollector()
-	host1, host2, sink1, sink2 := setupTwoHostsWithPubsub(t, ctx, tagCollector)
+	host1, host2, sink1, sink2 := setupTwoHostsWithPubsub(t, ctx)
 	defer host1.Close()
 	defer host2.Close()
 
@@ -228,23 +225,14 @@ func TestGossipSub_DecoderFallback(t *testing.T) {
 	defer baseHost2.Close()
 
 	sink1 := newTestSink()
-	tagCollector := newTagCollector()
-	host1, err := xray.Wrap(baseHost1,
-		xray.WithDecoder(gossipsub.Decoder{}.Match, gossipsub.Decoder{}.New),
-		xray.WithOnMessage(tagCollector.Factory()),
-		xray.WithSink(sink1),
-	)
+	host1, err := probe.Wrap(baseHost1, probe.WithSink(sink1))
 	if err != nil {
 		t.Fatalf("failed to wrap host1: %v", err)
 	}
 	defer host1.Close()
 
 	sink2 := newTestSink()
-	host2, err := xray.Wrap(baseHost2,
-		xray.WithDecoder(gossipsub.Decoder{}.Match, gossipsub.Decoder{}.New),
-		xray.WithOnMessage(tagCollector.Factory()),
-		xray.WithSink(sink2),
-	)
+	host2, err := probe.Wrap(baseHost2, probe.WithSink(sink2))
 	if err != nil {
 		t.Fatalf("failed to wrap host2: %v", err)
 	}
@@ -285,7 +273,6 @@ func TestGossipSub_DecoderFallback(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 
-	// Bytes are always counted on the hot path regardless of decoder errors
 	var foundTrafficEvent bool
 	events := sink1.Events()
 	for _, evt := range events {
@@ -318,23 +305,14 @@ func TestGossipSub_ManualProtocolTraffic(t *testing.T) {
 	defer baseHost2.Close()
 
 	sink1 := newTestSink()
-	tagCollector := newTagCollector()
-	host1, err := xray.Wrap(baseHost1,
-		xray.WithDecoder(gossipsub.Decoder{}.Match, gossipsub.Decoder{}.New),
-		xray.WithOnMessage(tagCollector.Factory()),
-		xray.WithSink(sink1),
-	)
+	host1, err := probe.Wrap(baseHost1, probe.WithSink(sink1))
 	if err != nil {
 		t.Fatalf("failed to wrap host1: %v", err)
 	}
 	defer host1.Close()
 
 	sink2 := newTestSink()
-	host2, err := xray.Wrap(baseHost2,
-		xray.WithDecoder(gossipsub.Decoder{}.Match, gossipsub.Decoder{}.New),
-		xray.WithOnMessage(tagCollector.Factory()),
-		xray.WithSink(sink2),
-	)
+	host2, err := probe.Wrap(baseHost2, probe.WithSink(sink2))
 	if err != nil {
 		t.Fatalf("failed to wrap host2: %v", err)
 	}
@@ -385,50 +363,51 @@ func TestGossipSub_ManualProtocolTraffic(t *testing.T) {
 
 	time.Sleep(200 * time.Millisecond)
 
-	// Topics arrive via the async decode pipeline to OnMessage handlers
-	topics := tagCollector.Topics()
+	topics := topicsFromSinks(sink1, sink2)
 	if _, ok := topics["manual-topic-a"]; !ok {
-		t.Error("manual-topic-a not found in decoded messages")
+		t.Error("manual-topic-a not found in decoded stream chunks")
 	}
 	if _, ok := topics["manual-topic-b"]; !ok {
-		t.Error("manual-topic-b not found in decoded messages")
+		t.Error("manual-topic-b not found in decoded stream chunks")
 	}
 }
 
-// tagCollector records topics seen in decoded messages via OnMessage pipeline.
-type tagCollector struct {
-	mu     sync.Mutex
-	topics map[string]struct{}
-}
+// topicsFromSinks replays captured StreamChunks through the gossipsub decoder
+// (decode lives in the backend, not the probe).
+func topicsFromSinks(sinks ...*testSink) map[string]struct{} {
+	topics := make(map[string]struct{})
+	decoders := make(map[uint64]decode.StreamDecoder)
+	factory := gossipsub.Decoder{}
 
-func newTagCollector() *tagCollector {
-	return &tagCollector{topics: make(map[string]struct{})}
-}
-
-func (tc *tagCollector) Factory() xray.OnMessageFactory {
-	return func(streamID uint32, protocol string) xray.OnMessage {
-		return func(msg xray.DecodedMessage) {
-			tc.mu.Lock()
-			defer tc.mu.Unlock()
-			for _, tag := range msg.Tags {
-				if tag.Name == "topic" {
-					for _, v := range tag.Values {
-						tc.topics[v] = struct{}{}
+	for _, sink := range sinks {
+		for _, evt := range sink.Events() {
+			c := evt.GetStreamChunk()
+			if c == nil {
+				continue
+			}
+			dec := decoders[c.StreamAlias]
+			if dec == nil {
+				dec = factory.New()
+				decoders[c.StreamAlias] = dec
+			}
+			emit := func(_ int, tags []decode.Tag, _ any) {
+				for _, tag := range tags {
+					if tag.Name == decode.TagTopic {
+						for _, v := range tag.Values {
+							topics[v] = struct{}{}
+						}
 					}
 				}
 			}
+			switch c.Direction {
+			case xraypb.Direction_DIRECTION_IN:
+				_ = dec.ObserveRead(c.Data, emit)
+			case xraypb.Direction_DIRECTION_OUT:
+				_ = dec.ObserveWrite(c.Data, emit)
+			}
 		}
 	}
-}
-
-func (tc *tagCollector) Topics() map[string]struct{} {
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
-	result := make(map[string]struct{}, len(tc.topics))
-	for k, v := range tc.topics {
-		result[k] = v
-	}
-	return result
+	return topics
 }
 
 type testSink struct {
@@ -475,7 +454,7 @@ func (s *testSink) Strings() map[uint32]string {
 	return result
 }
 
-func setupTwoHostsWithPubsub(t *testing.T, ctx context.Context, tc *tagCollector) (*xray.Host, *xray.Host, *testSink, *testSink) {
+func setupTwoHostsWithPubsub(t *testing.T, ctx context.Context) (*probe.Host, *probe.Host, *testSink, *testSink) {
 	baseHost1, err := libp2p.New(libp2p.ResourceManager(&network.NullResourceManager{}))
 	if err != nil {
 		t.Fatalf("failed to create base host1: %v", err)
@@ -487,11 +466,7 @@ func setupTwoHostsWithPubsub(t *testing.T, ctx context.Context, tc *tagCollector
 	}
 
 	sink1 := newTestSink()
-	host1, err := xray.Wrap(baseHost1,
-		xray.WithDecoder(gossipsub.Decoder{}.Match, gossipsub.Decoder{}.New),
-		xray.WithOnMessage(tc.Factory()),
-		xray.WithSink(sink1),
-	)
+	host1, err := probe.Wrap(baseHost1, probe.WithSink(sink1))
 	if err != nil {
 		baseHost1.Close()
 		baseHost2.Close()
@@ -499,11 +474,7 @@ func setupTwoHostsWithPubsub(t *testing.T, ctx context.Context, tc *tagCollector
 	}
 
 	sink2 := newTestSink()
-	host2, err := xray.Wrap(baseHost2,
-		xray.WithDecoder(gossipsub.Decoder{}.Match, gossipsub.Decoder{}.New),
-		xray.WithOnMessage(tc.Factory()),
-		xray.WithSink(sink2),
-	)
+	host2, err := probe.Wrap(baseHost2, probe.WithSink(sink2))
 	if err != nil {
 		host1.Close()
 		baseHost2.Close()

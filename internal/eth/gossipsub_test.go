@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"testing"
 
-	"github.com/ethp2p/xray"
+	"github.com/ethp2p/xray/internal/decode"
 	"github.com/gogo/protobuf/proto"
 	pubsubpb "github.com/libp2p/go-libp2p-pubsub/pb"
 )
@@ -18,7 +18,7 @@ type emittedAction struct {
 func collectActions(frame []byte) ([]emittedAction, error) {
 	decoder := GossipSubDecoder().New()
 	var actions []emittedAction
-	err := decoder.ObserveRead(frame, func(bytes int, tags []xray.Tag, _ any) {
+	err := decoder.ObserveRead(frame, func(bytes int, tags []decode.Tag, _ any) {
 		m := make(map[string][]string, len(tags))
 		for _, tag := range tags {
 			m[tag.Name] = append(m[tag.Name], tag.Values...)
@@ -102,8 +102,8 @@ func TestGossipSubDecoder_PublishEmit(t *testing.T) {
 		t.Errorf("topic = %v, want [beacon_block]", got)
 	}
 	// Payload too short — no slot tag.
-	if pub.tags[xray.TagDecodedSlot] != nil {
-		t.Errorf("unexpected slot tag: %v", pub.tags[xray.TagDecodedSlot])
+	if pub.tags[decode.TagDecodedSlot] != nil {
+		t.Errorf("unexpected slot tag: %v", pub.tags[decode.TagDecodedSlot])
 	}
 }
 
@@ -153,7 +153,7 @@ func TestGossipSubDecoder_FramingEmit(t *testing.T) {
 	// Framing emit carries only TagFraming; there must be at least one.
 	var found bool
 	for _, a := range actions {
-		if _, ok := a.tags[xray.TagFraming]; ok {
+		if _, ok := a.tags[decode.TagFraming]; ok {
 			found = true
 			break
 		}

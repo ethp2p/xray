@@ -1,16 +1,6 @@
-package xray
-
-import xraypb "github.com/ethp2p/xray/proto/xray"
-
-// Sink receives envelopes from the emitter.
-type Sink interface {
-	// Write delivers an envelope to the sink.
-	// Returns false if the sink cannot accept (backpressure).
-	Write(env *xraypb.Envelope) bool
-
-	// Close shuts down the sink.
-	Close() error
-}
+// Package decode holds stream-decode types shared by gossipsub framing and the
+// backend processor. The probe SDK does not depend on this package.
+package decode
 
 // Direction represents the direction of traffic flow.
 type Direction int
@@ -27,8 +17,7 @@ type Tag struct {
 	Values []string
 }
 
-// DecodedMessage is produced by the async decode pipeline for each
-// complete protocol message. Handlers receive these off the hot path.
+// DecodedMessage is produced by a decode pipeline for each complete protocol message.
 type DecodedMessage struct {
 	StreamID  uint32
 	ConnID    uint32
@@ -39,13 +28,10 @@ type DecodedMessage struct {
 	Parsed    any
 }
 
-// OnMessage processes a single decoded message. Called from a per-stream
-// goroutine; never concurrent for the same stream, but multiple streams
-// may call different OnMessage instances concurrently.
+// OnMessage processes a single decoded message.
 type OnMessage func(msg DecodedMessage)
 
-// OnMessageFactory creates a per-stream OnMessage handler. Called once when
-// a decoder matches the stream's protocol. Return nil to skip this stream.
+// OnMessageFactory creates a per-stream OnMessage handler.
 type OnMessageFactory func(streamID uint32, protocol string) OnMessage
 
 // EmitFunc is called once per decoded message.
@@ -68,15 +54,9 @@ type StreamDecoder interface {
 	ObserveWrite(data []byte, emit EmitFunc) error
 
 	// BufferedRead returns bytes buffered waiting for a full message.
-	//
-	// This is used on stream close/reset to account for bytes that were read
-	// but never completed a full framed message (e.g., stream closed mid-message).
 	BufferedRead() int
 
 	// BufferedWrite returns bytes buffered waiting for a full message.
-	//
-	// This is used on stream close/reset to account for bytes that were written
-	// but never completed a full framed message (e.g., stream closed mid-message).
 	BufferedWrite() int
 
 	// Reset clears internal buffers (called on stream close/reset).

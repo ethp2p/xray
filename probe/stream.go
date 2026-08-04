@@ -1,4 +1,4 @@
-package xray
+package probe
 
 import (
 	"context"
@@ -25,21 +25,15 @@ type trackedPeer struct {
 	peerID peer.ID
 }
 
-// wrappedStream intercepts Read/Write to emit StreamChunk envelopes and forward
-// data to the async decode worker.
+// wrappedStream intercepts Read/Write to emit StreamChunk envelopes.
 type wrappedStream struct {
 	network.Stream
 
-	net        *wrappedNetwork
-	wconn      *wrappedConn
-	streamID   uint32
-	protocol   string
-	emitter    *Emitter
-	worker     *decodeWorker
-	initDecode func(streamID uint32, protocol string) (StreamDecoder, []OnMessage)
-	decoder    StreamDecoder
-	handlers   []OnMessage
-	failed     bool
+	net      *wrappedNetwork
+	wconn    *wrappedConn
+	streamID uint32
+	protocol string
+	emitter  *Emitter
 }
 
 func (s *wrappedStream) SetProtocol(id protocol.ID) error {
@@ -47,9 +41,6 @@ func (s *wrappedStream) SetProtocol(id protocol.ID) error {
 		return err
 	}
 	s.protocol = string(id)
-	if s.initDecode != nil {
-		s.decoder, s.handlers = s.initDecode(s.streamID, s.protocol)
-	}
 	return nil
 }
 
@@ -60,7 +51,7 @@ func (s *wrappedStream) Conn() network.Conn {
 func (s *wrappedStream) Read(p []byte) (int, error) {
 	n, err := s.Stream.Read(p)
 	if n > 0 {
-		s.emitChunk(DirectionIn, p[:n])
+		s.emitChunk(directionIn, p[:n])
 	}
 	return n, err
 }
@@ -68,15 +59,12 @@ func (s *wrappedStream) Read(p []byte) (int, error) {
 func (s *wrappedStream) Write(p []byte) (int, error) {
 	n, err := s.Stream.Write(p)
 	if n > 0 {
-		s.emitChunk(DirectionOut, p[:n])
+		s.emitChunk(directionOut, p[:n])
 	}
 	return n, err
 }
 
-// emitChunk copies the bytes once and shares the copy between the Envelope
-// payload (frozen once Emit dispatches) and the async decode worker. The
-// envelope is read-only after Emit returns; the worker only reads.
-func (s *wrappedStream) emitChunk(dir Direction, data []byte) {
+func (s *wrappedStream) emitChunk(dir direction, data []byte) {
 	cp := make([]byte, len(data))
 	copy(cp, data)
 	s.emitter.Emit(&xraypb.Envelope{
@@ -88,9 +76,6 @@ func (s *wrappedStream) emitChunk(dir Direction, data []byte) {
 			},
 		},
 	})
-	if s.decoder != nil {
-		s.worker.sendShared(s, dir, cp)
-	}
 }
 
 func (s *wrappedStream) Close() error {
@@ -119,10 +104,8 @@ func (s *wrappedStream) emitClosed(reason xraypb.CloseReason) {
 // wrappedNetwork wraps network.Network to intercept stream creation.
 type wrappedNetwork struct {
 	network.Network
-	emitter    *Emitter
-	strings    *stringInterner
-	worker     *decodeWorker
-	initDecode func(streamID uint32, protocol string) (StreamDecoder, []OnMessage)
+	emitter *Emitter
+	strings *stringInterner
 
 	mu                sync.RWMutex
 	peers             map[peer.ID]*trackedPeer
@@ -305,17 +288,12 @@ func (n *wrappedNetwork) wrapStream(s network.Stream) *wrappedStream {
 	}
 
 	ws := &wrappedStream{
-		Stream:     s,
-		net:        n,
-		wconn:      wc,
-		streamID:   streamID,
-		protocol:   proto,
-		emitter:    n.emitter,
-		worker:     n.worker,
-		initDecode: n.initDecode,
-	}
-	if proto != "" && n.initDecode != nil {
-		ws.decoder, ws.handlers = n.initDecode(streamID, proto)
+		Stream:   s,
+		net:      n,
+		wconn:    wc,
+		streamID: streamID,
+		protocol: proto,
+		emitter:  n.emitter,
 	}
 
 	streamUpsert := &xraypb.StreamUpsert{
@@ -334,22 +312,22 @@ func (n *wrappedNetwork) wrapStream(s network.Stream) *wrappedStream {
 	return ws
 }
 
-func directionFromNetwork(d network.Direction) Direction {
+func directionFromNetwork(d network.Direction) direction {
 	switch d {
 	case network.DirInbound:
-		return DirectionIn
+		return directionIn
 	case network.DirOutbound:
-		return DirectionOut
+		return directionOut
 	default:
-		return DirectionUnknown
+		return directionUnknown
 	}
 }
 
-func directionToIngest(d Direction) xraypb.Direction {
+func directionToIngest(d direction) xraypb.Direction {
 	switch d {
-	case DirectionIn:
+	case directionIn:
 		return xraypb.Direction_DIRECTION_IN
-	case DirectionOut:
+	case directionOut:
 		return xraypb.Direction_DIRECTION_OUT
 	default:
 		return xraypb.Direction_DIRECTION_UNKNOWN

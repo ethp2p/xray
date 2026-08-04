@@ -7,7 +7,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 
-	"github.com/ethp2p/xray"
+	"github.com/ethp2p/xray/internal/decode"
 
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 )
@@ -37,7 +37,7 @@ func (d Decoder) Match(protocol string) bool {
 }
 
 // New returns a per-stream decoder instance.
-func (d Decoder) New() xray.StreamDecoder {
+func (d Decoder) New() decode.StreamDecoder {
 	max := d.MaxRPCSize
 	if max == 0 {
 		max = DefaultMaxRPCSize
@@ -55,11 +55,11 @@ type instance struct {
 	msgDecoder MessageDecoder
 }
 
-func (i *instance) ObserveRead(data []byte, emit xray.EmitFunc) error {
+func (i *instance) ObserveRead(data []byte, emit decode.EmitFunc) error {
 	return i.in.observe(i.msgDecoder, data, emit)
 }
 
-func (i *instance) ObserveWrite(data []byte, emit xray.EmitFunc) error {
+func (i *instance) ObserveWrite(data []byte, emit decode.EmitFunc) error {
 	return i.out.observe(i.msgDecoder, data, emit)
 }
 
@@ -87,7 +87,7 @@ func (v *bufferingRPC) reset() {
 	v.buf = v.buf[:0]
 }
 
-func (v *bufferingRPC) observe(msgDecoder MessageDecoder, data []byte, emit xray.EmitFunc) error {
+func (v *bufferingRPC) observe(msgDecoder MessageDecoder, data []byte, emit decode.EmitFunc) error {
 	v.buf = append(v.buf, data...)
 
 	for {
@@ -123,7 +123,7 @@ func (v *bufferingRPC) observe(msgDecoder MessageDecoder, data []byte, emit xray
 
 		// Framing bytes: varint prefix + proto field encoding overhead in the RPC envelope.
 		if framing := totalLen - innerBytes; framing > 0 {
-			emit(framing, []xray.Tag{{Name: xray.TagFraming}}, nil)
+			emit(framing, []decode.Tag{{Name: decode.TagFraming}}, nil)
 		}
 
 		v.buf = v.buf[totalLen:]
@@ -134,7 +134,7 @@ func (v *bufferingRPC) observe(msgDecoder MessageDecoder, data []byte, emit xray
 
 // emitActions atomises a single RPC into one emit per logical action and returns
 // the total number of bytes attributed to inner messages.
-func emitActions(rpc *pb.RPC, msgDecoder MessageDecoder, emit xray.EmitFunc) int {
+func emitActions(rpc *pb.RPC, msgDecoder MessageDecoder, emit decode.EmitFunc) int {
 	inner := 0
 
 	for _, sub := range rpc.Subscriptions {
@@ -149,10 +149,10 @@ func emitActions(rpc *pb.RPC, msgDecoder MessageDecoder, emit xray.EmitFunc) int
 		size := msg.Size()
 		inner += size
 		tags := map[string][]string{
-			xray.TagMessageKind: {"PUBLISH"},
+			decode.TagMessageKind: {"PUBLISH"},
 		}
 		if msg.Topic != nil {
-			tags[xray.TagTopic] = []string{*msg.Topic}
+			tags[decode.TagTopic] = []string{*msg.Topic}
 		}
 		if msgDecoder != nil {
 			msgDecoder(msg, tags)
@@ -167,7 +167,7 @@ func emitActions(rpc *pb.RPC, msgDecoder MessageDecoder, emit xray.EmitFunc) int
 		for _, iwant := range ctrl.Iwant {
 			size := iwant.Size()
 			inner += size
-			emit(size, []xray.Tag{{Name: xray.TagMessageKind, Values: []string{"IWANT"}}}, iwant)
+			emit(size, []decode.Tag{{Name: decode.TagMessageKind, Values: []string{"IWANT"}}}, iwant)
 		}
 		for _, graft := range ctrl.Graft {
 			inner += emitTopicControl(graft.Size(), "GRAFT", graft.TopicID, graft, emit)
@@ -178,7 +178,7 @@ func emitActions(rpc *pb.RPC, msgDecoder MessageDecoder, emit xray.EmitFunc) int
 		for _, idw := range ctrl.Idontwant {
 			size := idw.Size()
 			inner += size
-			emit(size, []xray.Tag{{Name: xray.TagMessageKind, Values: []string{"IDONTWANT"}}}, idw)
+			emit(size, []decode.Tag{{Name: decode.TagMessageKind, Values: []string{"IDONTWANT"}}}, idw)
 		}
 	}
 
@@ -188,20 +188,20 @@ func emitActions(rpc *pb.RPC, msgDecoder MessageDecoder, emit xray.EmitFunc) int
 // emitTopicControl emits a control action with a message_kind tag and optional topic tag.
 // Returns the size for accumulation into inner bytes. Builds the tag slice directly
 // without an intermediate map since control messages are not mutated before emit.
-func emitTopicControl(size int, kind string, topicID *string, parsed any, emit xray.EmitFunc) int {
-	tags := make([]xray.Tag, 1, 2)
-	tags[0] = xray.Tag{Name: xray.TagMessageKind, Values: []string{kind}}
+func emitTopicControl(size int, kind string, topicID *string, parsed any, emit decode.EmitFunc) int {
+	tags := make([]decode.Tag, 1, 2)
+	tags[0] = decode.Tag{Name: decode.TagMessageKind, Values: []string{kind}}
 	if topicID != nil {
-		tags = append(tags, xray.Tag{Name: xray.TagTopic, Values: []string{*topicID}})
+		tags = append(tags, decode.Tag{Name: decode.TagTopic, Values: []string{*topicID}})
 	}
 	emit(size, tags, parsed)
 	return size
 }
 
-func tagsFromMap(m map[string][]string) []xray.Tag {
-	tags := make([]xray.Tag, 0, len(m))
+func tagsFromMap(m map[string][]string) []decode.Tag {
+	tags := make([]decode.Tag, 0, len(m))
 	for name, values := range m {
-		tags = append(tags, xray.Tag{Name: name, Values: values})
+		tags = append(tags, decode.Tag{Name: name, Values: values})
 	}
 	return tags
 }

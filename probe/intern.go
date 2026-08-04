@@ -1,4 +1,4 @@
-package xray
+package probe
 
 import (
 	"sync"

@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ethp2p/xray"
 	"github.com/ethp2p/xray/api"
+	"github.com/ethp2p/xray/internal/decode"
 	"github.com/ethp2p/xray/internal/eth"
 	xraypb "github.com/ethp2p/xray/proto/xray"
 )
@@ -378,7 +378,7 @@ func (p *Processor) handleStreamChunk(sourceID string, observedAtNs int64, chunk
 		msgKind := tagValue(tags, tagMessageKind)
 
 		bleedDistance := 0
-		if v := tagValue(tags, xray.TagDecodedSlot); v != "" {
+		if v := tagValue(tags, decode.TagDecodedSlot); v != "" {
 			if payloadSlot, err := strconv.ParseUint(v, 10, 64); err == nil {
 				if payloadSlot < ref.Slot {
 					bleedDistance = int(ref.Slot - payloadSlot)
@@ -409,22 +409,22 @@ func (p *Processor) handleStreamChunk(sourceID string, observedAtNs int64, chunk
 		}
 
 		if topic == "beacon_block" && msgKind == "PUBLISH" && chunk.Direction == xraypb.Direction_DIRECTION_IN {
-			if v := tagValue(tags, xray.TagProposerIndex); v != "" {
+			if v := tagValue(tags, decode.TagProposerIndex); v != "" {
 				if idx, err := strconv.ParseUint(v, 10, 64); err == nil {
 					agg.summary.Meta.ProposerIndex = &idx
 				}
 			}
-			if v := tagValue(tags, xray.TagAttestationCount); v != "" {
+			if v := tagValue(tags, decode.TagAttestationCount); v != "" {
 				if count, err := strconv.Atoi(v); err == nil {
 					agg.summary.Meta.AttestationCount = &count
 				}
 			}
-			if v := tagValue(tags, xray.TagBlobCommitments); v != "" {
+			if v := tagValue(tags, decode.TagBlobCommitments); v != "" {
 				if count, err := strconv.Atoi(v); err == nil {
 					agg.summary.Meta.BlobCommitments = &count
 				}
 			}
-			if v := tagValue(tags, xray.TagTxCount); v != "" {
+			if v := tagValue(tags, decode.TagTxCount); v != "" {
 				if count, err := strconv.Atoi(v); err == nil {
 					agg.summary.Meta.TxCount = &count
 				}

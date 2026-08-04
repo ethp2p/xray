@@ -25,7 +25,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ethp2p/xray"
+	"github.com/ethp2p/xray/probe"
 	"github.com/ethp2p/xray/api"
 	"github.com/ethp2p/xray/internal/eth"
 	"github.com/ethp2p/xray/internal/ingest"
@@ -51,10 +51,10 @@ func TestIntrospectorUnixIngestHTTPAndWS(t *testing.T) {
 	require.NoError(t, err)
 	defer h1.Close()
 
-	ih, err := xray.Wrap(
+	ih, err := probe.Wrap(
 		h1,
-		xray.WithIngestAddr(fixture.socketPath),
-		xray.WithWaitForAttach(),
+		probe.WithIngestAddr(fixture.socketPath),
+		probe.WithWaitForAttach(),
 	)
 	require.NoError(t, err)
 	defer ih.Close()
@@ -100,10 +100,10 @@ func TestMultiSourceIsolation(t *testing.T) {
 	base1, err := libp2p.New()
 	require.NoError(t, err)
 	defer base1.Close()
-	ih1, err := xray.Wrap(base1,
-		xray.WithIngestAddr(fixture.socketPath),
-		xray.WithClientName("client-1"),
-		xray.WithWaitForAttach(),
+	ih1, err := probe.Wrap(base1,
+		probe.WithIngestAddr(fixture.socketPath),
+		probe.WithClientName("client-1"),
+		probe.WithWaitForAttach(),
 	)
 	require.NoError(t, err)
 	defer ih1.Close()
@@ -111,10 +111,10 @@ func TestMultiSourceIsolation(t *testing.T) {
 	base2, err := libp2p.New()
 	require.NoError(t, err)
 	defer base2.Close()
-	ih2, err := xray.Wrap(base2,
-		xray.WithIngestAddr(fixture.socketPath),
-		xray.WithClientName("client-2"),
-		xray.WithWaitForAttach(),
+	ih2, err := probe.Wrap(base2,
+		probe.WithIngestAddr(fixture.socketPath),
+		probe.WithClientName("client-2"),
+		probe.WithWaitForAttach(),
 	)
 	require.NoError(t, err)
 	defer ih2.Close()
@@ -161,10 +161,10 @@ func TestPeersEndpoint(t *testing.T) {
 	base1, err := libp2p.New()
 	require.NoError(t, err)
 	defer base1.Close()
-	ih1, err := xray.Wrap(base1,
-		xray.WithIngestAddr(fixture.socketPath),
-		xray.WithClientName("test-probe"),
-		xray.WithWaitForAttach(),
+	ih1, err := probe.Wrap(base1,
+		probe.WithIngestAddr(fixture.socketPath),
+		probe.WithClientName("test-probe"),
+		probe.WithWaitForAttach(),
 	)
 	require.NoError(t, err)
 	defer ih1.Close()
@@ -223,10 +223,10 @@ func TestWebSocketSourceScoping(t *testing.T) {
 	base1, err := libp2p.New()
 	require.NoError(t, err)
 	defer base1.Close()
-	ih1, err := xray.Wrap(base1,
-		xray.WithIngestAddr(fixture.socketPath),
-		xray.WithClientName("ws-test"),
-		xray.WithWaitForAttach(),
+	ih1, err := probe.Wrap(base1,
+		probe.WithIngestAddr(fixture.socketPath),
+		probe.WithClientName("ws-test"),
+		probe.WithWaitForAttach(),
 	)
 	require.NoError(t, err)
 	defer ih1.Close()
@@ -297,10 +297,10 @@ func TestIntrospectorGossipSubPublishE2E(t *testing.T) {
 	require.NoError(t, err)
 	defer baseHost1.Close()
 
-	host1, err := xray.Wrap(
+	host1, err := probe.Wrap(
 		baseHost1,
-		xray.WithIngestAddr(fixture.socketPath),
-		xray.WithWaitForAttach(),
+		probe.WithIngestAddr(fixture.socketPath),
+		probe.WithWaitForAttach(),
 	)
 	require.NoError(t, err)
 	defer host1.Close()
@@ -400,10 +400,10 @@ func TestSessionExclusivityOnReconnect(t *testing.T) {
 	base1, err := libp2p.New(libp2p.Identity(priv))
 	require.NoError(t, err)
 
-	ih1, err := xray.Wrap(base1,
-		xray.WithIngestAddr(fixture.socketPath),
-		xray.WithClientName("probe-v1"),
-		xray.WithWaitForAttach(),
+	ih1, err := probe.Wrap(base1,
+		probe.WithIngestAddr(fixture.socketPath),
+		probe.WithClientName("probe-v1"),
+		probe.WithWaitForAttach(),
 	)
 	require.NoError(t, err)
 
@@ -436,10 +436,10 @@ func TestSessionExclusivityOnReconnect(t *testing.T) {
 	base2, err := libp2p.New(libp2p.Identity(priv))
 	require.NoError(t, err)
 
-	ih2, err := xray.Wrap(base2,
-		xray.WithIngestAddr(fixture.socketPath),
-		xray.WithClientName("probe-v2"),
-		xray.WithWaitForAttach(),
+	ih2, err := probe.Wrap(base2,
+		probe.WithIngestAddr(fixture.socketPath),
+		probe.WithClientName("probe-v2"),
+		probe.WithWaitForAttach(),
 	)
 	require.NoError(t, err)
 	defer ih2.Close()

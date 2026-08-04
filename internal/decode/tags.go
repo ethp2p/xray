@@ -1,8 +1,6 @@
-package xray
+package decode
 
-// Tag names attached to DecodedMessage by the built-in decoders. Defined here
-// so external callers can switch on tag values without reaching into the
-// internal decoder packages.
+// Tag names attached to decoded messages by the built-in decoders.
 const (
 	TagTopic       = "topic"
 	TagMessageKind = "message_kind"

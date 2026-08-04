@@ -1,4 +1,4 @@
-package xray
+package probe
 
 import (
 	"context"
@@ -21,9 +21,8 @@ type Host struct {
 	host.Host
 	network *wrappedNetwork
 
-	emitter      *Emitter
-	decodeWorker *decodeWorker
-	ingestSink   *SinkIngest
+	emitter    *Emitter
+	ingestSink *SinkIngest
 }
 
 // Network returns the wrapped network.
@@ -59,11 +58,6 @@ func (h *Host) SetStreamHandlerMatch(pid protocol.ID, match func(protocol.ID) bo
 	h.Host.SetStreamHandlerMatch(pid, match, wrappedHandler)
 }
 
-// Emitter returns the event emitter for this host.
-func (h *Host) Emitter() *Emitter {
-	return h.emitter
-}
-
 // Close shuts down the instrumented host gracefully.
 func (h *Host) Close() error {
 	h.emitter.SetClosed(true)
@@ -73,10 +67,6 @@ func (h *Host) Close() error {
 		wg.Go(func() { sink.Close() })
 	}
 	wg.Wait()
-
-	if h.decodeWorker != nil {
-		h.decodeWorker.stop()
-	}
 
 	if h.ingestSink != nil {
 		h.ingestSink.Close()
@@ -97,42 +87,10 @@ func Wrap(h host.Host, opts ...Option) (*Host, error) {
 	emitter := NewEmitter(cfg.ringBufferSize)
 	strings := emitter.strings
 
-	var worker *decodeWorker
-	var initDecode func(streamID uint32, proto string) (StreamDecoder, []OnMessage)
-	if len(cfg.decoders) > 0 && len(cfg.onMessage) > 0 {
-		worker = newDecodeWorker()
-		factories := cfg.onMessage
-		decoders := cfg.decoders
-		initDecode = func(streamID uint32, proto string) (StreamDecoder, []OnMessage) {
-			var inst StreamDecoder
-			for _, entry := range decoders {
-				if entry.match(proto) {
-					inst = entry.decoderCtor()
-					break
-				}
-			}
-			if inst == nil {
-				return nil, nil
-			}
-			var handlers []OnMessage
-			for _, factory := range factories {
-				if fn := factory(streamID, proto); fn != nil {
-					handlers = append(handlers, fn)
-				}
-			}
-			if len(handlers) == 0 {
-				return nil, nil
-			}
-			return inst, handlers
-		}
-	}
-
 	wrappedNet := &wrappedNetwork{
 		Network:           h.Network(),
 		emitter:           emitter,
 		strings:           strings,
-		worker:            worker,
-		initDecode:        initDecode,
 		peers:             make(map[peer.ID]*trackedPeer),
 		conns:             make(map[string]*wrappedConn),
 		connByID:          make(map[uint32]*wrappedConn),
@@ -142,10 +100,9 @@ func Wrap(h host.Host, opts ...Option) (*Host, error) {
 	emitter.net = wrappedNet
 
 	instrumentedHost := &Host{
-		Host:         h,
-		emitter:      emitter,
-		decodeWorker: worker,
-		network:      wrappedNet,
+		Host:    h,
+		emitter: emitter,
+		network: wrappedNet,
 	}
 
 	for _, sink := range cfg.sinks {

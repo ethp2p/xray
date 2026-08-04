@@ -1,14 +1,11 @@
 package processor
 
 import (
-	"github.com/ethp2p/xray"
+	"github.com/ethp2p/xray/internal/decode"
 	"github.com/ethp2p/xray/internal/eth"
 )
 
-type Tag struct {
-	Name   string
-	Values []string
-}
+type Tag = decode.Tag
 
 type EmitFunc func(wireBytes int, tags []Tag, parsed any)
 
@@ -36,35 +33,26 @@ func tagValue(tags []Tag, name string) string {
 }
 
 type wrappedDecoder struct {
-	inner xray.StreamDecoder
+	inner decode.StreamDecoder
 }
 
 func (d wrappedDecoder) ObserveRead(data []byte, emit EmitFunc) error {
-	return d.inner.ObserveRead(data, instrumentEmitAdapter(emit))
+	return d.inner.ObserveRead(data, func(wireBytes int, tags []decode.Tag, parsed any) {
+		emit(wireBytes, tags, parsed)
+	})
 }
 
 func (d wrappedDecoder) ObserveWrite(data []byte, emit EmitFunc) error {
-	return d.inner.ObserveWrite(data, instrumentEmitAdapter(emit))
+	return d.inner.ObserveWrite(data, func(wireBytes int, tags []decode.Tag, parsed any) {
+		emit(wireBytes, tags, parsed)
+	})
 }
 
 func (d wrappedDecoder) Reset() {
 	d.inner.Reset()
 }
 
-func instrumentEmitAdapter(emit EmitFunc) xray.EmitFunc {
-	return func(wireBytes int, tags []xray.Tag, parsed any) {
-		converted := make([]Tag, 0, len(tags))
-		for _, tag := range tags {
-			converted = append(converted, Tag{
-				Name:   tag.Name,
-				Values: append([]string(nil), tag.Values...),
-			})
-		}
-		emit(wireBytes, converted, parsed)
-	}
-}
-
 const (
-	tagTopic       = xray.TagTopic
-	tagMessageKind = xray.TagMessageKind
+	tagTopic       = decode.TagTopic
+	tagMessageKind = decode.TagMessageKind
 )

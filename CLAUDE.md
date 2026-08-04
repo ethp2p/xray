@@ -5,8 +5,10 @@ Go instrumentation library for libp2p with a Solid.js real-time dashboard ("Ethe
 ## Project structure
 
 ```
-├── *.go                    # Producer SDK clients import (host wrapper, sinks, emitter)
+├── probe/                  # Producer SDK clients import (Wrap, sinks, emitter)
+├── alias.go / doc.go       # Deprecated root compat shim → probe
 ├── api/                    # Shared JSON DTOs for REST/WebSocket
+├── internal/decode/        # Stream-decode types (not used by probe)
 ├── internal/eth/           # Ethereum-specific: gossipsub decoder, SSZ extraction, slot clock
 ├── internal/gossipsub/     # Gossipsub RPC parser (varint framing, action atomization)
 ├── internal/processor/     # Per-slot aggregation

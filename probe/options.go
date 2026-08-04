@@ -1,11 +1,6 @@
-package xray
+package probe
 
 import "time"
-
-type decoderEntry struct {
-	match       func(string) bool
-	decoderCtor func() StreamDecoder
-}
 
 type config struct {
 	ringBufferSize int
@@ -14,8 +9,6 @@ type config struct {
 	ingestAddr     string
 	clientName     string
 	waitForAttach  bool
-	decoders       []decoderEntry
-	onMessage      []OnMessageFactory
 	sinks          []Sink
 }
 
@@ -27,16 +20,6 @@ type Option func(*config)
 func WithRingBufferSize(size int) Option {
 	return func(c *config) {
 		c.ringBufferSize = size
-	}
-}
-
-// WithDecoder registers a streaming protocol decoder.
-// match returns true for protocol IDs this decoder handles; decoderCtor
-// returns a fresh stateful decoder for each matched stream.
-// Multiple decoders can be registered; the first matching decoder wins.
-func WithDecoder(match func(string) bool, decoderCtor func() StreamDecoder) Option {
-	return func(c *config) {
-		c.decoders = append(c.decoders, decoderEntry{match: match, decoderCtor: decoderCtor})
 	}
 }
 
@@ -74,17 +57,10 @@ func WithWaitForAttach() Option {
 
 // WithSink adds a custom sink to receive trace events.
 // Multiple sinks can be registered; each receives all events.
+// Intended for tests and advanced embeddings; not part of the root compat shim.
 func WithSink(sink Sink) Option {
 	return func(c *config) {
 		c.sinks = append(c.sinks, sink)
-	}
-}
-
-// WithOnMessage registers a factory that creates per-stream message handlers.
-// Handlers receive decoded messages off the hot path in per-stream goroutines.
-func WithOnMessage(factory OnMessageFactory) Option {
-	return func(c *config) {
-		c.onMessage = append(c.onMessage, factory)
 	}
 }
 

@@ -6,13 +6,13 @@ import (
 
 	pubsubpb "github.com/libp2p/go-libp2p-pubsub/pb"
 
-	"github.com/ethp2p/xray"
+	"github.com/ethp2p/xray/internal/decode"
 )
 
 // SlotTracker returns a message handler factory that tracks slot transitions
 // and detects cross-slot activity on GossipSub streams.
-func SlotTracker(clock SlotClock, onBoundary func(prev, current uint64)) xray.OnMessageFactory {
-	return func(streamID uint32, protocol string) xray.OnMessage {
+func SlotTracker(clock SlotClock, onBoundary func(prev, current uint64)) decode.OnMessageFactory {
+	return func(streamID uint32, protocol string) decode.OnMessage {
 		if !strings.HasPrefix(protocol, "/meshsub/") &&
 			!strings.HasPrefix(protocol, "/floodsub/") {
 			return nil
@@ -21,7 +21,7 @@ func SlotTracker(clock SlotClock, onBoundary func(prev, current uint64)) xray.On
 		var prevSlot uint64
 		var initialized bool
 
-		return func(msg xray.DecodedMessage) {
+		return func(msg decode.DecodedMessage) {
 			ref, ok := clock.At(time.Now())
 			if !ok {
 				return
