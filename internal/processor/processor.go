@@ -10,7 +10,7 @@ import (
 	"github.com/ethp2p/xray"
 	"github.com/ethp2p/xray/api"
 	"github.com/ethp2p/xray/internal/eth"
-	wiretappb "github.com/ethp2p/xray/proto/wiretap"
+	xraypb "github.com/ethp2p/xray/proto/xray"
 )
 
 const slotBucketWidthMs = 100
@@ -79,16 +79,16 @@ func (p *Processor) SetOnFinalize(fn func(string, SlotDetail)) {
 	p.onFinalize = fn
 }
 
-func (p *Processor) ApplyForSource(sourceID string, event *wiretappb.Envelope) {
+func (p *Processor) ApplyForSource(sourceID string, event *xraypb.Envelope) {
 	if event == nil {
 		return
 	}
 
 	switch event.Payload.(type) {
-	case *wiretappb.Envelope_SnapshotStart:
+	case *xraypb.Envelope_SnapshotStart:
 		p.ResetSource(sourceID)
 		return
-	case *wiretappb.Envelope_SnapshotEnd:
+	case *xraypb.Envelope_SnapshotEnd:
 		return
 	}
 
@@ -106,19 +106,19 @@ func (p *Processor) ApplyForSource(sourceID string, event *wiretappb.Envelope) {
 	}
 
 	switch payload := event.Payload.(type) {
-	case *wiretappb.Envelope_StringDef:
+	case *xraypb.Envelope_StringDef:
 		p.mu.Lock()
 		src := p.ensureSourceLocked(sourceID)
 		src.strings[payload.StringDef.Id] = payload.StringDef.Value
 		p.mu.Unlock()
 
-	case *wiretappb.Envelope_PeerUpsert:
+	case *xraypb.Envelope_PeerUpsert:
 		p.mu.Lock()
 		src := p.ensureSourceLocked(sourceID)
 		src.peers.UpsertPeer(payload.PeerUpsert.PeerAlias, payload.PeerUpsert.PeerId)
 		p.mu.Unlock()
 
-	case *wiretappb.Envelope_ConnectionUpsert:
+	case *xraypb.Envelope_ConnectionUpsert:
 		cu := payload.ConnectionUpsert
 		p.mu.Lock()
 		src := p.ensureSourceLocked(sourceID)
@@ -136,19 +136,19 @@ func (p *Processor) ApplyForSource(sourceID string, event *wiretappb.Envelope) {
 		})
 		p.mu.Unlock()
 
-	case *wiretappb.Envelope_ConnectionClosed:
+	case *xraypb.Envelope_ConnectionClosed:
 		p.mu.Lock()
 		src := p.ensureSourceLocked(sourceID)
 		src.peers.CloseConnection(payload.ConnectionClosed.ConnAlias)
 		p.mu.Unlock()
 
-	case *wiretappb.Envelope_StreamUpsert:
+	case *xraypb.Envelope_StreamUpsert:
 		p.handleStreamUpsert(sourceID, payload.StreamUpsert)
 
-	case *wiretappb.Envelope_StreamClosed:
+	case *xraypb.Envelope_StreamClosed:
 		p.handleStreamClosed(sourceID, payload.StreamClosed)
 
-	case *wiretappb.Envelope_StreamChunk:
+	case *xraypb.Envelope_StreamChunk:
 		p.handleStreamChunk(sourceID, event.ObservedAtNs, payload.StreamChunk)
 	}
 
@@ -276,7 +276,7 @@ func (p *Processor) ensureSourceLocked(sourceID string) *sourceState {
 	return src
 }
 
-func (p *Processor) handleStreamUpsert(sourceID string, stream *wiretappb.StreamUpsert) {
+func (p *Processor) handleStreamUpsert(sourceID string, stream *xraypb.StreamUpsert) {
 	if stream == nil {
 		return
 	}
@@ -292,7 +292,7 @@ func (p *Processor) handleStreamUpsert(sourceID string, stream *wiretappb.Stream
 	}
 }
 
-func (p *Processor) handleStreamClosed(sourceID string, stream *wiretappb.StreamClosed) {
+func (p *Processor) handleStreamClosed(sourceID string, stream *xraypb.StreamClosed) {
 	if stream == nil {
 		return
 	}
@@ -307,7 +307,7 @@ func (p *Processor) handleStreamClosed(sourceID string, stream *wiretappb.Stream
 	delete(src.streams, stream.StreamAlias)
 }
 
-func (p *Processor) handleStreamChunk(sourceID string, observedAtNs int64, chunk *wiretappb.StreamChunk) {
+func (p *Processor) handleStreamChunk(sourceID string, observedAtNs int64, chunk *xraypb.StreamChunk) {
 	if chunk == nil {
 		return
 	}
@@ -391,14 +391,14 @@ func (p *Processor) handleStreamChunk(sourceID string, observedAtNs int64, chunk
 		if bleedDistance > 0 {
 			wb := uint64(wireBytes)
 			switch chunk.Direction {
-			case wiretappb.Direction_DIRECTION_IN:
+			case xraypb.Direction_DIRECTION_IN:
 				if agg.summary.Meta.BleedBytesIn == nil {
 					v := wb
 					agg.summary.Meta.BleedBytesIn = &v
 				} else {
 					*agg.summary.Meta.BleedBytesIn += wb
 				}
-			case wiretappb.Direction_DIRECTION_OUT:
+			case xraypb.Direction_DIRECTION_OUT:
 				if agg.summary.Meta.BleedBytesOut == nil {
 					v := wb
 					agg.summary.Meta.BleedBytesOut = &v
@@ -408,7 +408,7 @@ func (p *Processor) handleStreamChunk(sourceID string, observedAtNs int64, chunk
 			}
 		}
 
-		if topic == "beacon_block" && msgKind == "PUBLISH" && chunk.Direction == wiretappb.Direction_DIRECTION_IN {
+		if topic == "beacon_block" && msgKind == "PUBLISH" && chunk.Direction == xraypb.Direction_DIRECTION_IN {
 			if v := tagValue(tags, xray.TagProposerIndex); v != "" {
 				if idx, err := strconv.ParseUint(v, 10, 64); err == nil {
 					agg.summary.Meta.ProposerIndex = &idx
@@ -434,9 +434,9 @@ func (p *Processor) handleStreamChunk(sourceID string, observedAtNs int64, chunk
 
 	var err error
 	switch chunk.Direction {
-	case wiretappb.Direction_DIRECTION_IN:
+	case xraypb.Direction_DIRECTION_IN:
 		err = state.decoder.ObserveRead(chunk.Data, emit)
-	case wiretappb.Direction_DIRECTION_OUT:
+	case xraypb.Direction_DIRECTION_OUT:
 		err = state.decoder.ObserveWrite(chunk.Data, emit)
 	}
 	if err != nil {
@@ -536,7 +536,7 @@ func ensureSlotLocked(src *sourceState, ref eth.SlotRef) *slotAggregate {
 	return agg
 }
 
-func addRawTrafficLocked(agg *slotAggregate, observedAtNs, offsetMs int64, dir wiretappb.Direction, bytes uint64) {
+func addRawTrafficLocked(agg *slotAggregate, observedAtNs, offsetMs int64, dir xraypb.Direction, bytes uint64) {
 	bucketOffset := (offsetMs / slotBucketWidthMs) * slotBucketWidthMs
 	point := agg.buckets[bucketOffset]
 	if point == nil {
@@ -545,17 +545,17 @@ func addRawTrafficLocked(agg *slotAggregate, observedAtNs, offsetMs int64, dir w
 	}
 
 	switch dir {
-	case wiretappb.Direction_DIRECTION_IN:
+	case xraypb.Direction_DIRECTION_IN:
 		agg.summary.BytesIn += bytes
 		point.BytesIn += bytes
-	case wiretappb.Direction_DIRECTION_OUT:
+	case xraypb.Direction_DIRECTION_OUT:
 		agg.summary.BytesOut += bytes
 		point.BytesOut += bytes
 	}
 	agg.summary.LastUpdatedNs = observedAtNs
 }
 
-func addBreakdownLocked(agg *slotAggregate, bucketOffset int64, dir wiretappb.Direction, bytes uint64, protocol, topic, messageKind string, bleedDistance int) {
+func addBreakdownLocked(agg *slotAggregate, bucketOffset int64, dir xraypb.Direction, bytes uint64, protocol, topic, messageKind string, bleedDistance int) {
 	key := slotKey{protocol: protocol, topic: topic, messageKind: messageKind}
 
 	row := agg.breakdown[key]
@@ -565,12 +565,12 @@ func addBreakdownLocked(agg *slotAggregate, bucketOffset int64, dir wiretappb.Di
 	}
 	row.MsgCount++
 	switch dir {
-	case wiretappb.Direction_DIRECTION_IN:
+	case xraypb.Direction_DIRECTION_IN:
 		row.BytesIn += bytes
 		if bleedDistance > 0 {
 			row.BleedBytesIn += bytes
 		}
-	case wiretappb.Direction_DIRECTION_OUT:
+	case xraypb.Direction_DIRECTION_OUT:
 		row.BytesOut += bytes
 		if bleedDistance > 0 {
 			row.BleedBytesOut += bytes
@@ -589,12 +589,12 @@ func addBreakdownLocked(agg *slotAggregate, bucketOffset int64, dir wiretappb.Di
 	}
 	bb.MsgCount++
 	switch dir {
-	case wiretappb.Direction_DIRECTION_IN:
+	case xraypb.Direction_DIRECTION_IN:
 		bb.BytesIn += bytes
 		if bleedDistance > 0 {
 			bb.BleedBytesIn += bytes
 		}
-	case wiretappb.Direction_DIRECTION_OUT:
+	case xraypb.Direction_DIRECTION_OUT:
 		bb.BytesOut += bytes
 		if bleedDistance > 0 {
 			bb.BleedBytesOut += bytes
@@ -612,9 +612,9 @@ func addBreakdownLocked(agg *slotAggregate, bucketOffset int64, dir wiretappb.Di
 		}
 		entry := row.BleedByDistance[distKey]
 		switch dir {
-		case wiretappb.Direction_DIRECTION_IN:
+		case xraypb.Direction_DIRECTION_IN:
 			entry.BytesIn += bytes
-		case wiretappb.Direction_DIRECTION_OUT:
+		case xraypb.Direction_DIRECTION_OUT:
 			entry.BytesOut += bytes
 		}
 		row.BleedByDistance[distKey] = entry
@@ -624,9 +624,9 @@ func addBreakdownLocked(agg *slotAggregate, bucketOffset int64, dir wiretappb.Di
 		}
 		bbEntry := bb.BleedByDistance[distKey]
 		switch dir {
-		case wiretappb.Direction_DIRECTION_IN:
+		case xraypb.Direction_DIRECTION_IN:
 			bbEntry.BytesIn += bytes
-		case wiretappb.Direction_DIRECTION_OUT:
+		case xraypb.Direction_DIRECTION_OUT:
 			bbEntry.BytesOut += bytes
 		}
 		bb.BleedByDistance[distKey] = bbEntry
@@ -641,11 +641,11 @@ func (p *Processor) currentSlotLocked() uint64 {
 	return ref.Slot
 }
 
-func dirString(d wiretappb.Direction) string {
+func dirString(d xraypb.Direction) string {
 	switch d {
-	case wiretappb.Direction_DIRECTION_IN:
+	case xraypb.Direction_DIRECTION_IN:
 		return "inbound"
-	case wiretappb.Direction_DIRECTION_OUT:
+	case xraypb.Direction_DIRECTION_OUT:
 		return "outbound"
 	default:
 		return "unknown"

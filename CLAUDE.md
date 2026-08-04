@@ -1,19 +1,22 @@
-# Wiretap
+# Xray
 
 Go instrumentation library for libp2p with a Solid.js real-time dashboard ("Ethereum Xray") for Ethereum consensus layer analysis. Live at [xray.ethp2p.dev](https://xray.ethp2p.dev).
 
 ## Project structure
 
 ```
-├── probe/                  # Library clients import (host wrapper, sinks, emitter)
-├── eth/                    # Ethereum-specific: gossipsub decoder, SSZ extraction, slot clock
-├── gossipsub/              # Gossipsub RPC parser (varint framing, action atomization)
-├── backend/                # Per-slot aggregation, REST/WS API, processor
-├── wire/                   # Shared protocol codec (ingest framing)
-├── proto/                  # Protobuf definitions and generated code
-│   └── ingest/
-├── cmd/wiretap/            # Backend binary entrypoint
+├── *.go                    # Producer SDK clients import (host wrapper, sinks, emitter)
+├── api/                    # Shared JSON DTOs for REST/WebSocket
+├── internal/eth/           # Ethereum-specific: gossipsub decoder, SSZ extraction, slot clock
+├── internal/gossipsub/     # Gossipsub RPC parser (varint framing, action atomization)
+├── internal/processor/     # Per-slot aggregation
+├── internal/ingest/        # Probe connection listener
+├── internal/server/        # REST/WS API
+├── proto/xray/             # Protobuf definitions and generated code
+│   └── wire/               # Typed length-delimited ingest protocol codec
+├── cmd/xray/               # Backend binary entrypoint
 ├── itest/                  # Integration tests
+├── infra/                  # Podman Quadlets and production deployment
 └── dashboard/              # Solid.js web dashboard ("Ethereum Xray")
     ├── src/App.tsx          # Entire UI (~2100 lines, single file)
     ├── src/index.css         # CSS reset, type scale, animations
@@ -111,11 +114,11 @@ Flow colors use `topicColor()` which assigns stable HSL hues via `TOPIC_HUES`. K
 
 ### Processor
 
-`backend/processor.go` aggregates traffic by slot with 100ms buckets. Each `BucketBreakdown` has `protocol`, `topic`, `message_kind`, `bytes_in`, `bytes_out`, `msg_count`, `bleed_bytes_in`, `bleed_bytes_out`, `bleed_by_distance`.
+`internal/processor/processor.go` aggregates traffic by slot with 100ms buckets. Each `BucketBreakdown` has `protocol`, `topic`, `message_kind`, `bytes_in`, `bytes_out`, `msg_count`, `bleed_bytes_in`, `bleed_bytes_out`, `bleed_by_distance`.
 
 Bleed detection: compares `eth.payload.slot` (from SSZ) against the observed slot. Distance bucketed as "1", "2", "3", "4+".
 
-### SSZ extraction (`eth/ssz_meta.go`, `eth/ssz_slot.go`)
+### SSZ extraction (`internal/eth/`)
 
 Zero-copy offset reads from Snappy-decompressed gossipsub payloads. Offsets verified against Fulu consensus-spec:
 
@@ -125,7 +128,7 @@ Zero-copy offset reads from Snappy-decompressed gossipsub payloads. Offsets veri
 
 Content-addressed decode cache (FNV-64a hash, 256 entries) avoids re-decompressing the same payload from multiple peers.
 
-### WebSocket batching (`backend/server.go`)
+### WebSocket batching (`internal/server/`)
 
 Server collects slot updates for 100ms via `time.AfterFunc`, then sends one `slot_batch` message. Snapshot written before client registration to prevent concurrent WebSocket writes (gorilla/websocket requires single-writer).
 

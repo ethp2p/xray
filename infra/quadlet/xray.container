@@ -10,14 +10,14 @@ ContainerName=ethp2p-xray
 User=1000
 Group=1000
 PublishPort=127.0.0.1:9100:9100
-Volume=/home/ubuntu/.wiretap/data:/data
+Volume=/home/ubuntu/.xray/data:/data
 Volume=/run/xray:/run/xray
 NoNewPrivileges=true
 DropCapability=all
 ReadOnly=true
 LogDriver=journald
 PidsLimit=1024
-Exec=--ingest=/run/xray/wiretap.sock --listen=0.0.0.0:9100 --data-dir=/data --static-dir=/srv/dashboard --genesis-unix=1606824023 --retention-days=30
+Exec=--ingest=/run/xray/xray.sock --listen=0.0.0.0:9100 --data-dir=/data --static-dir=/srv/dashboard --genesis-unix=1606824023 --retention-days=30
 PodmanArgs=--stop-timeout=60
 
 [Service]

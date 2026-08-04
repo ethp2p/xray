@@ -12,18 +12,18 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
-	wiretappb "github.com/ethp2p/xray/proto/wiretap"
+	xraypb "github.com/ethp2p/xray/proto/xray"
 )
 
-func readTraceFile(t *testing.T, path string) []*wiretappb.Envelope {
+func readTraceFile(t *testing.T, path string) []*xraypb.Envelope {
 	t.Helper()
 	f, err := os.Open(path)
 	require.NoError(t, err)
 	defer f.Close()
 
-	var envs []*wiretappb.Envelope
+	var envs []*xraypb.Envelope
 	for {
-		var e wiretappb.Envelope
+		var e xraypb.Envelope
 		if err := readDelimited(f, &e, 1<<20); err != nil {
 			if err == io.EOF {
 				break
@@ -65,13 +65,13 @@ func readDelimited(r io.Reader, msg proto.Message, maxSize int) error {
 	return proto.Unmarshal(data, msg)
 }
 
-func assertHasPayloadType(t *testing.T, envs []*wiretappb.Envelope, kind string) {
+func assertHasPayloadType(t *testing.T, envs []*xraypb.Envelope, kind string) {
 	t.Helper()
 	assert.Greater(t, countPayloadType(envs, kind), 0,
 		"should have %s envelopes", kind)
 }
 
-func countPayloadType(envs []*wiretappb.Envelope, kind string) int {
+func countPayloadType(envs []*xraypb.Envelope, kind string) int {
 	count := 0
 	for _, e := range envs {
 		switch kind {
@@ -116,10 +116,10 @@ func countPayloadType(envs []*wiretappb.Envelope, kind string) int {
 	return count
 }
 
-func sumStreamChunks(envs []*wiretappb.Envelope) (totalIn, totalOut uint64) {
+func sumStreamChunks(envs []*xraypb.Envelope) (totalIn, totalOut uint64) {
 	for _, e := range envs {
 		if c := e.GetStreamChunk(); c != nil {
-			if c.Direction == wiretappb.Direction_DIRECTION_IN {
+			if c.Direction == xraypb.Direction_DIRECTION_IN {
 				totalIn += uint64(len(c.Data))
 			} else {
 				totalOut += uint64(len(c.Data))
@@ -129,7 +129,7 @@ func sumStreamChunks(envs []*wiretappb.Envelope) (totalIn, totalOut uint64) {
 	return
 }
 
-func assertMonotonicSeq(t *testing.T, envs []*wiretappb.Envelope) {
+func assertMonotonicSeq(t *testing.T, envs []*xraypb.Envelope) {
 	t.Helper()
 	var lastSeq uint64
 	for _, e := range envs {
@@ -140,7 +140,7 @@ func assertMonotonicSeq(t *testing.T, envs []*wiretappb.Envelope) {
 	}
 }
 
-func assertTimestampsInRange(t *testing.T, envs []*wiretappb.Envelope, start, end time.Time) {
+func assertTimestampsInRange(t *testing.T, envs []*xraypb.Envelope, start, end time.Time) {
 	t.Helper()
 	for _, e := range envs {
 		ts := time.Unix(0, e.ObservedAtNs)
@@ -149,7 +149,7 @@ func assertTimestampsInRange(t *testing.T, envs []*wiretappb.Envelope, start, en
 	}
 }
 
-func extractStreamAliases(envs []*wiretappb.Envelope) []uint64 {
+func extractStreamAliases(envs []*xraypb.Envelope) []uint64 {
 	var ids []uint64
 	for _, e := range envs {
 		if so := e.GetStreamUpsert(); so != nil {

@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/ethp2p/xray/internal/eth"
-	wiretappb "github.com/ethp2p/xray/proto/wiretap"
+	xraypb "github.com/ethp2p/xray/proto/xray"
 )
 
 func TestProcessorTracksSlotTrafficAndBreakdown(t *testing.T) {
@@ -14,14 +14,14 @@ func TestProcessorTracksSlotTrafficAndBreakdown(t *testing.T) {
 
 	const src = "test-source"
 
-	p.ApplyForSource(src, &wiretappb.Envelope{
-		Payload: &wiretappb.Envelope_StringDef{
-			StringDef: &wiretappb.StringDef{Id: 1, Value: "/meshsub/1.1.0"},
+	p.ApplyForSource(src, &xraypb.Envelope{
+		Payload: &xraypb.Envelope_StringDef{
+			StringDef: &xraypb.StringDef{Id: 1, Value: "/meshsub/1.1.0"},
 		},
 	})
-	p.ApplyForSource(src, &wiretappb.Envelope{
-		Payload: &wiretappb.Envelope_StreamUpsert{
-			StreamUpsert: &wiretappb.StreamUpsert{
+	p.ApplyForSource(src, &xraypb.Envelope{
+		Payload: &xraypb.Envelope_StreamUpsert{
+			StreamUpsert: &xraypb.StreamUpsert{
 				StreamAlias: 1,
 				ProtocolId:  1,
 			},
@@ -29,12 +29,12 @@ func TestProcessorTracksSlotTrafficAndBreakdown(t *testing.T) {
 	})
 
 	now := clock.GenesisTime.Add(15 * time.Second)
-	event := &wiretappb.Envelope{
+	event := &xraypb.Envelope{
 		ObservedAtNs: now.UnixNano(),
-		Payload: &wiretappb.Envelope_StreamChunk{
-			StreamChunk: &wiretappb.StreamChunk{
+		Payload: &xraypb.Envelope_StreamChunk{
+			StreamChunk: &xraypb.StreamChunk{
 				StreamAlias: 1,
-				Direction:   wiretappb.Direction_DIRECTION_IN,
+				Direction:   xraypb.Direction_DIRECTION_IN,
 				Data: []byte{
 					12, 10, 10, 8, 1, 18, 6, 47, 116, 101, 115, 116, 1, 2, 3, 4,
 				},

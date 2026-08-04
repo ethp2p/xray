@@ -1,8 +1,8 @@
 syntax = "proto3";
 
-package wiretap.v1;
+package xray.v1;
 
-option go_package = "github.com/ethp2p/xray/proto/wiretap;wiretappb";
+option go_package = "github.com/ethp2p/xray/proto/xray;xraypb";
 
 message Envelope {
   uint64 seq = 1;

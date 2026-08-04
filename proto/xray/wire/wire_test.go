@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"testing"
 
-	wiretappb "github.com/ethp2p/xray/proto/wiretap"
+	xraypb "github.com/ethp2p/xray/proto/xray"
 )
 
 func TestRoundTripClientHello(t *testing.T) {
 	var buf bytes.Buffer
-	hello := &wiretappb.ClientHello{
+	hello := &xraypb.ClientHello{
 		ProtocolVersion: 2,
 		PeerId:          []byte("test-peer"),
 		ClientName:      "prysm/v5.2.0",
@@ -28,10 +28,10 @@ func TestRoundTripClientHello(t *testing.T) {
 
 func TestRoundTripEnvelope(t *testing.T) {
 	var buf bytes.Buffer
-	env := &wiretappb.Envelope{
+	env := &xraypb.Envelope{
 		Seq: 42,
-		Payload: &wiretappb.Envelope_StringDef{
-			StringDef: &wiretappb.StringDef{Id: 1, Value: "test"},
+		Payload: &xraypb.Envelope_StringDef{
+			StringDef: &xraypb.StringDef{Id: 1, Value: "test"},
 		},
 	}
 	if err := WriteEnvelope(&buf, env); err != nil {
@@ -55,7 +55,7 @@ func TestRejectsUnknownDiscriminator(t *testing.T) {
 }
 
 func TestInferNetwork(t *testing.T) {
-	if got := InferNetwork("/tmp/wiretap.sock"); got != "unix" {
+	if got := InferNetwork("/tmp/xray.sock"); got != "unix" {
 		t.Fatalf("expected unix, got %s", got)
 	}
 	if got := InferNetwork("127.0.0.1:9100"); got != "tcp" {

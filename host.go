@@ -11,7 +11,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 	ma "github.com/multiformats/go-multiaddr"
 
-	wiretappb "github.com/ethp2p/xray/proto/wiretap"
+	xraypb "github.com/ethp2p/xray/proto/xray"
 )
 
 // Host wraps a libp2p host to provide instrumentation.
@@ -85,8 +85,8 @@ func (h *Host) Close() error {
 	return h.Host.Close()
 }
 
-// Wiretap creates an instrumented host that records traffic and connection events.
-func Wiretap(h host.Host, opts ...Option) (*Host, error) {
+// Wrap creates an instrumented host that records traffic and connection events.
+func Wrap(h host.Host, opts ...Option) (*Host, error) {
 	cfg := &config{
 		ringBufferSize: DefaultRingBufferSize,
 	}
@@ -136,8 +136,8 @@ func Wiretap(h host.Host, opts ...Option) (*Host, error) {
 		peers:             make(map[peer.ID]*trackedPeer),
 		conns:             make(map[string]*wrappedConn),
 		connByID:          make(map[uint32]*wrappedConn),
-		connectionUpserts: make(map[uint32]*wiretappb.ConnectionUpsert),
-		streamUpserts:     make(map[uint32]*wiretappb.StreamUpsert),
+		connectionUpserts: make(map[uint32]*xraypb.ConnectionUpsert),
+		streamUpserts:     make(map[uint32]*xraypb.StreamUpsert),
 	}
 	emitter.net = wrappedNet
 
@@ -199,13 +199,13 @@ func (n *notifiee) Connected(_ network.Network, conn network.Conn) {
 	if !created {
 		return
 	}
-	n.emitter.Emit(&wiretappb.Envelope{
-		Payload: &wiretappb.Envelope_PeerUpsert{
+	n.emitter.Emit(&xraypb.Envelope{
+		Payload: &xraypb.Envelope_PeerUpsert{
 			PeerUpsert: n.net.peerUpsertFor(wc.peerAlias, conn.RemotePeer()),
 		},
 	})
-	n.emitter.Emit(&wiretappb.Envelope{
-		Payload: &wiretappb.Envelope_ConnectionUpsert{
+	n.emitter.Emit(&xraypb.Envelope{
+		Payload: &xraypb.Envelope_ConnectionUpsert{
 			ConnectionUpsert: upsert,
 		},
 	})
@@ -222,20 +222,20 @@ func (n *notifiee) Disconnected(_ network.Network, conn network.Conn) {
 	// open streams. Emit StreamClosed{CONN_CLOSED} for each so consumers can
 	// drop their decoder state instead of leaking it.
 	for _, alias := range n.net.removeStreamsForConn(wc.connID) {
-		n.emitter.Emit(&wiretappb.Envelope{
-			Payload: &wiretappb.Envelope_StreamClosed{
-				StreamClosed: &wiretappb.StreamClosed{
+		n.emitter.Emit(&xraypb.Envelope{
+			Payload: &xraypb.Envelope_StreamClosed{
+				StreamClosed: &xraypb.StreamClosed{
 					StreamAlias: alias,
 					ClosedAtNs:  closedAtNs,
-					Reason:      wiretappb.CloseReason_CLOSE_REASON_CONN_CLOSED,
+					Reason:      xraypb.CloseReason_CLOSE_REASON_CONN_CLOSED,
 				},
 			},
 		})
 	}
 
-	n.emitter.Emit(&wiretappb.Envelope{
-		Payload: &wiretappb.Envelope_ConnectionClosed{
-			ConnectionClosed: &wiretappb.ConnectionClosed{
+	n.emitter.Emit(&xraypb.Envelope{
+		Payload: &xraypb.Envelope_ConnectionClosed{
+			ConnectionClosed: &xraypb.ConnectionClosed{
 				ConnAlias:  uint64(wc.connID),
 				ClosedAtNs: closedAtNs,
 			},

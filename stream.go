@@ -10,7 +10,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 
-	wiretappb "github.com/ethp2p/xray/proto/wiretap"
+	xraypb "github.com/ethp2p/xray/proto/xray"
 )
 
 // wrappedConn tracks the instrumentation state on a connection.
@@ -79,9 +79,9 @@ func (s *wrappedStream) Write(p []byte) (int, error) {
 func (s *wrappedStream) emitChunk(dir Direction, data []byte) {
 	cp := make([]byte, len(data))
 	copy(cp, data)
-	s.emitter.Emit(&wiretappb.Envelope{
-		Payload: &wiretappb.Envelope_StreamChunk{
-			StreamChunk: &wiretappb.StreamChunk{
+	s.emitter.Emit(&xraypb.Envelope{
+		Payload: &xraypb.Envelope_StreamChunk{
+			StreamChunk: &xraypb.StreamChunk{
 				StreamAlias: uint64(s.streamID),
 				Direction:   directionToIngest(dir),
 				Data:        cp,
@@ -94,20 +94,20 @@ func (s *wrappedStream) emitChunk(dir Direction, data []byte) {
 }
 
 func (s *wrappedStream) Close() error {
-	s.emitClosed(wiretappb.CloseReason_CLOSE_REASON_CLOSE)
+	s.emitClosed(xraypb.CloseReason_CLOSE_REASON_CLOSE)
 	return s.Stream.Close()
 }
 
 func (s *wrappedStream) Reset() error {
-	s.emitClosed(wiretappb.CloseReason_CLOSE_REASON_RESET)
+	s.emitClosed(xraypb.CloseReason_CLOSE_REASON_RESET)
 	return s.Stream.Reset()
 }
 
-func (s *wrappedStream) emitClosed(reason wiretappb.CloseReason) {
+func (s *wrappedStream) emitClosed(reason xraypb.CloseReason) {
 	s.net.removeStream(s.streamID)
-	s.emitter.Emit(&wiretappb.Envelope{
-		Payload: &wiretappb.Envelope_StreamClosed{
-			StreamClosed: &wiretappb.StreamClosed{
+	s.emitter.Emit(&xraypb.Envelope{
+		Payload: &xraypb.Envelope_StreamClosed{
+			StreamClosed: &xraypb.StreamClosed{
 				StreamAlias: uint64(s.streamID),
 				ClosedAtNs:  time.Now().UnixNano(),
 				Reason:      reason,
@@ -128,8 +128,8 @@ type wrappedNetwork struct {
 	peers             map[peer.ID]*trackedPeer
 	conns             map[string]*wrappedConn
 	connByID          map[uint32]*wrappedConn
-	connectionUpserts map[uint32]*wiretappb.ConnectionUpsert
-	streamUpserts     map[uint32]*wiretappb.StreamUpsert
+	connectionUpserts map[uint32]*xraypb.ConnectionUpsert
+	streamUpserts     map[uint32]*xraypb.StreamUpsert
 }
 
 // connectionUpsertFor builds a ConnectionUpsert from a libp2p connection,
@@ -142,7 +142,7 @@ type wrappedNetwork struct {
 // SinkFile.mu). The periodic snapshot loop on SinkFile takes those locks in
 // the opposite order — SinkFile.mu then n.mu via Emitter.Snapshot — so
 // holding n.mu across Intern would deadlock under contention.
-func (n *wrappedNetwork) connectionUpsertFor(conn network.Conn, connID uint32, openedAtNs int64) (*wrappedConn, *wiretappb.ConnectionUpsert, bool) {
+func (n *wrappedNetwork) connectionUpsertFor(conn network.Conn, connID uint32, openedAtNs int64) (*wrappedConn, *xraypb.ConnectionUpsert, bool) {
 	state := conn.ConnState()
 	transportID := n.strings.Intern(state.Transport)
 	securityID := n.strings.Intern(string(state.Security))
@@ -164,7 +164,7 @@ func (n *wrappedNetwork) connectionUpsertFor(conn network.Conn, connID uint32, o
 		n.peers[conn.RemotePeer()] = peerInfo
 	}
 
-	upsert := &wiretappb.ConnectionUpsert{
+	upsert := &xraypb.ConnectionUpsert{
 		ConnAlias:   uint64(connID),
 		PeerAlias:   peerInfo.alias,
 		RemoteAddr:  conn.RemoteMultiaddr().String(),
@@ -187,8 +187,8 @@ func (n *wrappedNetwork) connectionUpsertFor(conn network.Conn, connID uint32, o
 	return wc, upsert, true
 }
 
-func (n *wrappedNetwork) peerUpsertFor(alias uint64, id peer.ID) *wiretappb.PeerUpsert {
-	return &wiretappb.PeerUpsert{
+func (n *wrappedNetwork) peerUpsertFor(alias uint64, id peer.ID) *xraypb.PeerUpsert {
+	return &xraypb.PeerUpsert{
 		PeerAlias: alias,
 		PeerId:    []byte(id),
 	}
@@ -231,7 +231,7 @@ func (n *wrappedNetwork) removeStreamsForConn(connAlias uint32) []uint64 {
 	return aliases
 }
 
-func (n *wrappedNetwork) addStreamUpsert(u *wiretappb.StreamUpsert) {
+func (n *wrappedNetwork) addStreamUpsert(u *xraypb.StreamUpsert) {
 	n.mu.Lock()
 	n.streamUpserts[uint32(u.StreamAlias)] = u
 	n.mu.Unlock()
@@ -246,23 +246,23 @@ func (n *wrappedNetwork) removeStream(streamID uint32) {
 // snapshot returns the current state as ingest envelope payloads, sorted by
 // alias so replays are byte-stable across runs (file-based golden tests, debug
 // diffs). Suitable for bringing a fresh consumer up to date.
-func (n *wrappedNetwork) snapshot() ([]*wiretappb.PeerUpsert, []*wiretappb.ConnectionUpsert, []*wiretappb.StreamUpsert) {
+func (n *wrappedNetwork) snapshot() ([]*xraypb.PeerUpsert, []*xraypb.ConnectionUpsert, []*xraypb.StreamUpsert) {
 	n.mu.RLock()
 	defer n.mu.RUnlock()
 
-	peers := make([]*wiretappb.PeerUpsert, 0, len(n.peers))
+	peers := make([]*xraypb.PeerUpsert, 0, len(n.peers))
 	for _, p := range n.peers {
 		peers = append(peers, n.peerUpsertFor(p.alias, p.peerID))
 	}
 	sort.Slice(peers, func(i, j int) bool { return peers[i].PeerAlias < peers[j].PeerAlias })
 
-	connections := make([]*wiretappb.ConnectionUpsert, 0, len(n.connectionUpserts))
+	connections := make([]*xraypb.ConnectionUpsert, 0, len(n.connectionUpserts))
 	for _, c := range n.connectionUpserts {
 		connections = append(connections, c)
 	}
 	sort.Slice(connections, func(i, j int) bool { return connections[i].ConnAlias < connections[j].ConnAlias })
 
-	streams := make([]*wiretappb.StreamUpsert, 0, len(n.streamUpserts))
+	streams := make([]*xraypb.StreamUpsert, 0, len(n.streamUpserts))
 	for _, s := range n.streamUpserts {
 		streams = append(streams, s)
 	}
@@ -287,17 +287,17 @@ func (n *wrappedNetwork) wrapStream(s network.Stream) *wrappedStream {
 	if wc == nil {
 		openedAt := time.Now().UnixNano()
 		connID := n.emitter.NextConnID()
-		var upsert *wiretappb.ConnectionUpsert
+		var upsert *xraypb.ConnectionUpsert
 		var created bool
 		wc, upsert, created = n.connectionUpsertFor(s.Conn(), connID, openedAt)
 		if created {
-			n.emitter.Emit(&wiretappb.Envelope{
-				Payload: &wiretappb.Envelope_PeerUpsert{
+			n.emitter.Emit(&xraypb.Envelope{
+				Payload: &xraypb.Envelope_PeerUpsert{
 					PeerUpsert: n.peerUpsertFor(wc.peerAlias, s.Conn().RemotePeer()),
 				},
 			})
-			n.emitter.Emit(&wiretappb.Envelope{
-				Payload: &wiretappb.Envelope_ConnectionUpsert{
+			n.emitter.Emit(&xraypb.Envelope{
+				Payload: &xraypb.Envelope_ConnectionUpsert{
 					ConnectionUpsert: upsert,
 				},
 			})
@@ -318,7 +318,7 @@ func (n *wrappedNetwork) wrapStream(s network.Stream) *wrappedStream {
 		ws.decoder, ws.handlers = n.initDecode(streamID, proto)
 	}
 
-	streamUpsert := &wiretappb.StreamUpsert{
+	streamUpsert := &xraypb.StreamUpsert{
 		StreamAlias: uint64(streamID),
 		ConnAlias:   uint64(wc.connID),
 		Direction:   directionToIngest(directionFromNetwork(s.Stat().Direction)),
@@ -326,8 +326,8 @@ func (n *wrappedNetwork) wrapStream(s network.Stream) *wrappedStream {
 		OpenedAtNs:  time.Now().UnixNano(),
 	}
 	n.addStreamUpsert(streamUpsert)
-	n.emitter.Emit(&wiretappb.Envelope{
-		Payload: &wiretappb.Envelope_StreamUpsert{
+	n.emitter.Emit(&xraypb.Envelope{
+		Payload: &xraypb.Envelope_StreamUpsert{
 			StreamUpsert: streamUpsert,
 		},
 	})
@@ -345,13 +345,13 @@ func directionFromNetwork(d network.Direction) Direction {
 	}
 }
 
-func directionToIngest(d Direction) wiretappb.Direction {
+func directionToIngest(d Direction) xraypb.Direction {
 	switch d {
 	case DirectionIn:
-		return wiretappb.Direction_DIRECTION_IN
+		return xraypb.Direction_DIRECTION_IN
 	case DirectionOut:
-		return wiretappb.Direction_DIRECTION_OUT
+		return xraypb.Direction_DIRECTION_OUT
 	default:
-		return wiretappb.Direction_DIRECTION_UNKNOWN
+		return xraypb.Direction_DIRECTION_UNKNOWN
 	}
 }

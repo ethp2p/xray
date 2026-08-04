@@ -20,7 +20,7 @@ A Solid.js dashboard ("Ethereum Xray") renders the data in real time.
 │                  (Prysm, Lighthouse, etc.)                    │
 │                                                               │
 │  ┌─────────────────────────────────────────────────────────┐  │
-│  │                 xray wiretap library                    │  │
+│  │                 xray producer library                   │  │
 │  │  Wraps libp2p Host, intercepts streams/connections      │  │
 │  │  Forwards raw bytes via ingest protocol                 │  │
 │  └──────────────────────┬──────────────────────────────────┘  │
@@ -46,7 +46,7 @@ A Solid.js dashboard ("Ethereum Xray") renders the data in real time.
                                             └─────────────────┘
 ```
 
-The **wiretap** is a library that clients embed. It wraps the libp2p `Host`, intercepts every `Read`/`Write` on every stream, and forwards raw byte chunks over a lightweight ingest protocol to the backend. The probe has no Ethereum-specific logic; it sends opaque bytes.
+The **producer library** is what clients embed. It wraps the libp2p `Host`, intercepts every `Read`/`Write` on every stream, and forwards raw byte chunks over a lightweight ingest protocol to the backend. The probe has no Ethereum-specific logic; it sends opaque bytes.
 
 The **backend** is a standalone binary (`cmd/xray`). It accepts probe connections, reassembles gossipsub RPC frames, decodes SSZ payloads to extract slot numbers and block metadata, then aggregates traffic into 100ms time buckets per slot. It serves a REST + WebSocket API for the dashboard and persists finalized slots and source metadata to SQLite.
 
@@ -151,7 +151,7 @@ the production deployment to commit
 ```go
 import "github.com/ethp2p/xray"
 
-ih, err := xray.Wiretap(h,
+ih, err := xray.Wrap(h,
     xray.WithIngestAddr("/tmp/xray.sock"),
     xray.WithClientName("prysm"),
     xray.WithWaitForAttach(),
@@ -182,7 +182,7 @@ omit it if instrumentation must not hold up the node.
 ## Project structure
 
 ```
-*.go                    Wiretap producer SDK (host wrapper, sinks, emitter) at module root
+*.go                    Producer SDK (host wrapper, sinks, emitter) at module root
 api/                    Shared JSON DTOs for REST/WebSocket responses
 cmd/xray/               Backend binary entrypoint
 internal/eth/           Ethereum slot clock and SSZ extraction
@@ -192,8 +192,8 @@ internal/processor/     Per-source aggregation and finalized slot production
 internal/server/        REST/WebSocket API server
 internal/sources/       Probe source registry
 internal/storage/       SQLite persistence for sources and finalized slots
-proto/wiretap/          Protobuf definitions and generated ingest messages
-proto/wiretap/wire/     Typed length-delimited ingest protocol codec
+proto/xray/             Protobuf definitions and generated ingest messages
+proto/xray/wire/        Typed length-delimited ingest protocol codec
 itest/                  Integration tests (gossipsub decoding, introspector E2E)
 dashboard/              Solid.js web dashboard ("Ethereum Xray")
 clients/                Hand-written Rust and JavaScript producer SDKs
@@ -209,7 +209,7 @@ The probe wraps a `go-libp2p` host transparently:
 import "github.com/ethp2p/xray"
 
 host, _ := libp2p.New(...)
-ih, err := xray.Wiretap(host,
+ih, err := xray.Wrap(host,
     xray.WithIngestAddr("/tmp/xray.sock"),
     xray.WithClientName("my-client/v1.0"),
     xray.WithWaitForAttach(),                    // block until backend connects
@@ -224,7 +224,7 @@ ih, err := xray.Wiretap(host,
 defer ih.Close()
 ```
 
-`xray.Wiretap` returns a `*xray.Host` that satisfies `host.Host`. Existing code works unchanged; all stream reads/writes are intercepted and forwarded.
+`xray.Wrap` returns a `*xray.Host` that satisfies `host.Host`. Existing code works unchanged; all stream reads/writes are intercepted and forwarded.
 
 ## Configuration
 

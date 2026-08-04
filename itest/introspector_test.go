@@ -51,7 +51,7 @@ func TestIntrospectorUnixIngestHTTPAndWS(t *testing.T) {
 	require.NoError(t, err)
 	defer h1.Close()
 
-	ih, err := xray.Wiretap(
+	ih, err := xray.Wrap(
 		h1,
 		xray.WithIngestAddr(fixture.socketPath),
 		xray.WithWaitForAttach(),
@@ -100,7 +100,7 @@ func TestMultiSourceIsolation(t *testing.T) {
 	base1, err := libp2p.New()
 	require.NoError(t, err)
 	defer base1.Close()
-	ih1, err := xray.Wiretap(base1,
+	ih1, err := xray.Wrap(base1,
 		xray.WithIngestAddr(fixture.socketPath),
 		xray.WithClientName("client-1"),
 		xray.WithWaitForAttach(),
@@ -111,7 +111,7 @@ func TestMultiSourceIsolation(t *testing.T) {
 	base2, err := libp2p.New()
 	require.NoError(t, err)
 	defer base2.Close()
-	ih2, err := xray.Wiretap(base2,
+	ih2, err := xray.Wrap(base2,
 		xray.WithIngestAddr(fixture.socketPath),
 		xray.WithClientName("client-2"),
 		xray.WithWaitForAttach(),
@@ -161,7 +161,7 @@ func TestPeersEndpoint(t *testing.T) {
 	base1, err := libp2p.New()
 	require.NoError(t, err)
 	defer base1.Close()
-	ih1, err := xray.Wiretap(base1,
+	ih1, err := xray.Wrap(base1,
 		xray.WithIngestAddr(fixture.socketPath),
 		xray.WithClientName("test-probe"),
 		xray.WithWaitForAttach(),
@@ -223,7 +223,7 @@ func TestWebSocketSourceScoping(t *testing.T) {
 	base1, err := libp2p.New()
 	require.NoError(t, err)
 	defer base1.Close()
-	ih1, err := xray.Wiretap(base1,
+	ih1, err := xray.Wrap(base1,
 		xray.WithIngestAddr(fixture.socketPath),
 		xray.WithClientName("ws-test"),
 		xray.WithWaitForAttach(),
@@ -297,7 +297,7 @@ func TestIntrospectorGossipSubPublishE2E(t *testing.T) {
 	require.NoError(t, err)
 	defer baseHost1.Close()
 
-	host1, err := xray.Wiretap(
+	host1, err := xray.Wrap(
 		baseHost1,
 		xray.WithIngestAddr(fixture.socketPath),
 		xray.WithWaitForAttach(),
@@ -400,7 +400,7 @@ func TestSessionExclusivityOnReconnect(t *testing.T) {
 	base1, err := libp2p.New(libp2p.Identity(priv))
 	require.NoError(t, err)
 
-	ih1, err := xray.Wiretap(base1,
+	ih1, err := xray.Wrap(base1,
 		xray.WithIngestAddr(fixture.socketPath),
 		xray.WithClientName("probe-v1"),
 		xray.WithWaitForAttach(),
@@ -436,7 +436,7 @@ func TestSessionExclusivityOnReconnect(t *testing.T) {
 	base2, err := libp2p.New(libp2p.Identity(priv))
 	require.NoError(t, err)
 
-	ih2, err := xray.Wiretap(base2,
+	ih2, err := xray.Wrap(base2,
 		xray.WithIngestAddr(fixture.socketPath),
 		xray.WithClientName("probe-v2"),
 		xray.WithWaitForAttach(),
@@ -475,7 +475,7 @@ type introspectorFixture struct {
 func startIntrospectorFixture(t *testing.T, ctx context.Context) introspectorFixture {
 	t.Helper()
 
-	socketPath := filepath.Join(os.TempDir(), fmt.Sprintf("wiretap-introspector-%d.sock", time.Now().UnixNano()))
+	socketPath := filepath.Join(os.TempDir(), fmt.Sprintf("xray-introspector-%d.sock", time.Now().UnixNano()))
 	t.Cleanup(func() {
 		_ = os.Remove(socketPath)
 	})

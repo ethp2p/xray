@@ -12,8 +12,8 @@ import (
 	"github.com/ethp2p/xray/internal/processor"
 	"github.com/ethp2p/xray/internal/sources"
 	"github.com/ethp2p/xray/internal/storage"
-	wiretappb "github.com/ethp2p/xray/proto/wiretap"
-	"github.com/ethp2p/xray/proto/wiretap/wire"
+	xraypb "github.com/ethp2p/xray/proto/xray"
+	"github.com/ethp2p/xray/proto/xray/wire"
 )
 
 // Listener accepts inbound connections from probes, performs a
@@ -145,7 +145,7 @@ func (l *Listener) handleConnection(conn net.Conn) {
 	}
 	lastAcked := l.processor.LastAppliedSeq(sourceID)
 
-	err = wire.WriteServerHello(conn, &wiretappb.ServerHello{
+	err = wire.WriteServerHello(conn, &xraypb.ServerHello{
 		ProtocolVersion: wire.IngestProtocolVersion,
 		SourceId:        sourceID,
 		LastAckedSeq:    lastAcked,

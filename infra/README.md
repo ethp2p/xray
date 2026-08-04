@@ -6,7 +6,7 @@ This directory defines the production Xray stack as Podman 4.9 Quadlets managed 
 
 - `quadlet/nethermind.container` owns the execution client process and `/data/nethermind`.
 - `quadlet/prysm.container` owns the consensus client process and `/data/.eth2`.
-- `quadlet/xray.container` owns the Xray process, `/home/ubuntu/.wiretap/data`, and the loopback dashboard port.
+- `quadlet/xray.container` owns the Xray process, `/home/ubuntu/.xray/data`, and the loopback dashboard port.
 - `tmpfiles/xray.conf` owns the shared runtime socket directory.
 - `images/prysm.Containerfile` builds the instrumented Prysm fork.
 
@@ -20,7 +20,7 @@ Xray uses a read-only root filesystem. Prysm and Nethermind use writable disposa
 |---|---|
 | Nethermind | `1.36.0`, linux/amd64 manifest `sha256:d915b29966286ec9ceee400c889e0b18fd4d84e7895402f3f4fa5750209c0a25`; local image ID `cdb9f10e374c729affe6945856aa322d38eda2a38eb9011e207d3f256ac72742` |
 | Prysm fork | `ethp2p/prysm:xray`, commit `1fcc706ce44eacd253ae3f5078995c5b3437e5fd`; raptor image digest `sha256:336cb761957e5526239ecf265362c03a62979ca0a6ad89f63a88d6cda020c05a` |
-| Xray | `ethp2p/xray` (formerly `ethp2p/wiretap`), commit `728d16ac90fc698d71136e3959f8270a0f85df28`; imported production image ID `c24dddc9fe3135533c40beb1fe4c090e449b5f5f63919c3486e0b0768bb5fad6` |
+| Xray | `ethp2p/xray`, commit `728d16ac90fc698d71136e3959f8270a0f85df28`; imported production image ID `c24dddc9fe3135533c40beb1fe4c090e449b5f5f63919c3486e0b0768bb5fad6` |
 
 Prysm and Xray use local image tags on raptor. The image IDs recorded after each build are the rollout pins. Publishing both images to GHCR by digest is the next step for multi-host deployment.
 
@@ -32,7 +32,7 @@ Build Prysm from a clean archive so local Git objects, binaries, databases, and 
 build_dir=$(mktemp -d)
 git -C /home/ubuntu/prysm archive 1fcc706ce44eacd253ae3f5078995c5b3437e5fd | tar -x -C "$build_dir"
 sudo podman build \
-  --file /home/ubuntu/wiretap/infra/images/prysm.Containerfile \
+  --file /home/ubuntu/xray/infra/images/prysm.Containerfile \
   --tag localhost/ethp2p/prysm:1fcc706ce4 \
   "$build_dir"
 ```
@@ -40,10 +40,10 @@ sudo podman build \
 On raptor, import the already validated production image into Podman and give it the pinned local tag:
 
 ```bash
-docker save wiretap-wiretap:latest |
+docker save ethp2p-xray:latest |
   sudo podman load
 sudo podman tag \
-  wiretap-wiretap:latest \
+  ethp2p-xray:latest \
   localhost/ethp2p/xray:728d16ac90fc
 ```
 

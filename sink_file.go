@@ -8,7 +8,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	wiretappb "github.com/ethp2p/xray/proto/wiretap"
+	xraypb "github.com/ethp2p/xray/proto/xray"
 )
 
 // SinkFile writes envelopes to disk as length-delimited protobuf, prefixed with
@@ -61,7 +61,7 @@ func NewSinkFile(path string, emitter *Emitter, opts ...SinkFileOption) (*SinkFi
 }
 
 // Write delivers an envelope to the file.
-func (s *SinkFile) Write(env *wiretappb.Envelope) bool {
+func (s *SinkFile) Write(env *xraypb.Envelope) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -72,7 +72,7 @@ func (s *SinkFile) Write(env *wiretappb.Envelope) bool {
 	return s.writeEnvelopeLocked(env) == nil
 }
 
-func (s *SinkFile) writeEnvelopeLocked(env *wiretappb.Envelope) error {
+func (s *SinkFile) writeEnvelopeLocked(env *xraypb.Envelope) error {
 	data, err := proto.Marshal(env)
 	if err != nil {
 		return err
@@ -135,35 +135,35 @@ func (s *SinkFile) snapshotLoop() {
 // snapshotEnvelopes converts a snapshot into a sequence of envelopes wrapped
 // between SnapshotStart and SnapshotEnd markers. Used by both SinkFile and
 // SinkIngest to bring a fresh consumer up to date.
-func snapshotEnvelopes(snap snapshot) []*wiretappb.Envelope {
-	envs := make([]*wiretappb.Envelope, 0, 2+len(snap.strings)+len(snap.peers)+len(snap.connections)+len(snap.streams))
-	envs = append(envs, &wiretappb.Envelope{
-		Payload: &wiretappb.Envelope_SnapshotStart{SnapshotStart: &wiretappb.SnapshotStart{}},
+func snapshotEnvelopes(snap snapshot) []*xraypb.Envelope {
+	envs := make([]*xraypb.Envelope, 0, 2+len(snap.strings)+len(snap.peers)+len(snap.connections)+len(snap.streams))
+	envs = append(envs, &xraypb.Envelope{
+		Payload: &xraypb.Envelope_SnapshotStart{SnapshotStart: &xraypb.SnapshotStart{}},
 	})
 	for id, value := range snap.strings {
-		envs = append(envs, &wiretappb.Envelope{
-			Payload: &wiretappb.Envelope_StringDef{
-				StringDef: &wiretappb.StringDef{Id: uint32(id), Value: value},
+		envs = append(envs, &xraypb.Envelope{
+			Payload: &xraypb.Envelope_StringDef{
+				StringDef: &xraypb.StringDef{Id: uint32(id), Value: value},
 			},
 		})
 	}
 	for _, p := range snap.peers {
-		envs = append(envs, &wiretappb.Envelope{
-			Payload: &wiretappb.Envelope_PeerUpsert{PeerUpsert: p},
+		envs = append(envs, &xraypb.Envelope{
+			Payload: &xraypb.Envelope_PeerUpsert{PeerUpsert: p},
 		})
 	}
 	for _, c := range snap.connections {
-		envs = append(envs, &wiretappb.Envelope{
-			Payload: &wiretappb.Envelope_ConnectionUpsert{ConnectionUpsert: c},
+		envs = append(envs, &xraypb.Envelope{
+			Payload: &xraypb.Envelope_ConnectionUpsert{ConnectionUpsert: c},
 		})
 	}
 	for _, st := range snap.streams {
-		envs = append(envs, &wiretappb.Envelope{
-			Payload: &wiretappb.Envelope_StreamUpsert{StreamUpsert: st},
+		envs = append(envs, &xraypb.Envelope{
+			Payload: &xraypb.Envelope_StreamUpsert{StreamUpsert: st},
 		})
 	}
-	envs = append(envs, &wiretappb.Envelope{
-		Payload: &wiretappb.Envelope_SnapshotEnd{SnapshotEnd: &wiretappb.SnapshotEnd{}},
+	envs = append(envs, &xraypb.Envelope{
+		Payload: &xraypb.Envelope_SnapshotEnd{SnapshotEnd: &xraypb.SnapshotEnd{}},
 	})
 	return envs
 }

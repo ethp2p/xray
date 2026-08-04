@@ -5,7 +5,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	wiretappb "github.com/ethp2p/xray/proto/wiretap"
+	xraypb "github.com/ethp2p/xray/proto/xray"
 )
 
 // DefaultRingBufferSize is the default number of envelopes to keep in the ring buffer.
@@ -18,7 +18,7 @@ type Emitter struct {
 
 	nextSeq uint64
 
-	buffer    []*wiretappb.Envelope
+	buffer    []*xraypb.Envelope
 	bufferIdx int
 	bufferLen int
 
@@ -41,7 +41,7 @@ func NewEmitter(bufferSize int) *Emitter {
 		bufferSize = DefaultRingBufferSize
 	}
 	e := &Emitter{
-		buffer:  make([]*wiretappb.Envelope, bufferSize),
+		buffer:  make([]*xraypb.Envelope, bufferSize),
 		nextSeq: 1, // seq=0 is reserved for synthesized snapshot envelopes
 	}
 	e.strings = newStringInterner(e)
@@ -67,7 +67,7 @@ func (e *Emitter) NextStreamID() uint32 {
 // to the ring buffer, and fans out to all sinks. Sink writes happen after the
 // lock is released so a slow sink (e.g. SinkFile doing disk I/O) cannot stall
 // other producers calling Emit.
-func (e *Emitter) Emit(env *wiretappb.Envelope) {
+func (e *Emitter) Emit(env *xraypb.Envelope) {
 	e.mu.Lock()
 	if e.closed {
 		e.mu.Unlock()
@@ -85,7 +85,7 @@ func (e *Emitter) Emit(env *wiretappb.Envelope) {
 	}
 }
 
-func (e *Emitter) addToBufferLocked(env *wiretappb.Envelope) {
+func (e *Emitter) addToBufferLocked(env *xraypb.Envelope) {
 	e.buffer[e.bufferIdx] = env
 	e.bufferIdx = (e.bufferIdx + 1) % len(e.buffer)
 	if e.bufferLen < len(e.buffer) {
@@ -98,7 +98,7 @@ func (e *Emitter) addToBufferLocked(env *wiretappb.Envelope) {
 // false means the ring's oldest envelope is newer than startSeq, i.e. a gap
 // occurred and the caller must fall back to a snapshot. An empty slice with
 // ok=true means there is nothing to replay (caller is already caught up).
-func (e *Emitter) EventsFromSeq(startSeq uint64) ([]*wiretappb.Envelope, bool) {
+func (e *Emitter) EventsFromSeq(startSeq uint64) ([]*xraypb.Envelope, bool) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.bufferLen == 0 {
@@ -114,7 +114,7 @@ func (e *Emitter) EventsFromSeq(startSeq uint64) ([]*wiretappb.Envelope, bool) {
 		return nil, false
 	}
 
-	out := make([]*wiretappb.Envelope, 0, e.bufferLen)
+	out := make([]*xraypb.Envelope, 0, e.bufferLen)
 	for i := 0; i < e.bufferLen; i++ {
 		env := e.buffer[(oldestIdx+i)%len(e.buffer)]
 		if env.Seq >= startSeq {
@@ -126,13 +126,13 @@ func (e *Emitter) EventsFromSeq(startSeq uint64) ([]*wiretappb.Envelope, bool) {
 
 // snapshot is the probe's current state, replayed by SinkFile and SinkIngest
 // as a sequence of upsert envelopes when a fresh consumer attaches. Internal:
-// the wiretappb types are transport mechanics and should not leak through the
+// the xraypb types are transport mechanics and should not leak through the
 // public SDK surface.
 type snapshot struct {
 	strings     []string
-	peers       []*wiretappb.PeerUpsert
-	connections []*wiretappb.ConnectionUpsert
-	streams     []*wiretappb.StreamUpsert
+	peers       []*xraypb.PeerUpsert
+	connections []*xraypb.ConnectionUpsert
+	streams     []*xraypb.StreamUpsert
 }
 
 func (e *Emitter) snapshot() snapshot {

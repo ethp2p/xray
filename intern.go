@@ -3,7 +3,7 @@ package xray
 import (
 	"sync"
 
-	wiretappb "github.com/ethp2p/xray/proto/wiretap"
+	xraypb "github.com/ethp2p/xray/proto/xray"
 )
 
 // stringInterner assigns compact sequential IDs to strings for wire efficiency.
@@ -42,9 +42,9 @@ func (si *stringInterner) Intern(s string) uint32 {
 	si.stringIDs[s] = id
 	si.mu.Unlock()
 
-	si.emitter.Emit(&wiretappb.Envelope{
-		Payload: &wiretappb.Envelope_StringDef{
-			StringDef: &wiretappb.StringDef{Id: id, Value: s},
+	si.emitter.Emit(&xraypb.Envelope{
+		Payload: &xraypb.Envelope_StringDef{
+			StringDef: &xraypb.StringDef{Id: id, Value: s},
 		},
 	})
 	return id
