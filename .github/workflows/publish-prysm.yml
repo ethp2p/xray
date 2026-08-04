@@ -1,0 +1,61 @@
+# Build the instrumented Prysm image from ethp2p/prysm and publish to GHCR.
+# Uses infra/images/prysm.Containerfile from this repository.
+name: Publish Prysm image
+
+on:
+  workflow_dispatch:
+    inputs:
+      prysm_ref:
+        description: Git ref in ethp2p/prysm to build (commit, tag, or branch)
+        required: true
+        default: 1fcc706ce44eacd253ae3f5078995c5b3437e5fd
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ethp2p/prysm
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out xray (Containerfile)
+        uses: actions/checkout@v4
+
+      - name: Check out ethp2p/prysm
+        uses: actions/checkout@v4
+        with:
+          repository: ethp2p/prysm
+          ref: ${{ inputs.prysm_ref }}
+          path: prysm-src
+
+      - name: Resolve short tag
+        id: tag
+        run: |
+          sha=$(git -C prysm-src rev-parse HEAD)
+          short=$(git -C prysm-src rev-parse --short=10 HEAD)
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+          echo "short=${short}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@f2a1d5e99d037542a71f64918e516c093c6f3fc4
+        with:
+          context: prysm-src
+          file: infra/images/prysm.Containerfile
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.short }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/ethp2p/prysm
+            org.opencontainers.image.revision=${{ steps.tag.outputs.sha }}

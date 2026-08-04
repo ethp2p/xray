@@ -4,8 +4,8 @@ Wants=network-online.target
 After=network-online.target
 
 [Container]
-Image=localhost/ethp2p/xray:728d16ac90fc
-Pull=never
+Image=ghcr.io/ethp2p/xray:728d16ac90fc
+Pull=missing
 ContainerName=ethp2p-xray
 User=1000
 Group=1000

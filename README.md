@@ -63,7 +63,7 @@ in `infra/quadlet/`; the shared ingest socket is created by
 | Podman 4.9+ | Rootful Podman for system Quadlets under `/etc/containers/systemd` |
 | Git | Clone this repository |
 | uid/gid `1000` | Units run as `User=1000` / `Group=1000`; `/run/xray` is `0770 1000:1000` |
-| Xray container image | Build or import before `systemctl start` (see below) |
+| Xray container image | Pull from GHCR or build locally (see below) |
 | JWT file (full stack only) | Engine API secret for Nethermind ↔ Prysm |
 
 Optional full stack also needs disk for Nethermind (`/data/nethermind`) and
@@ -88,16 +88,26 @@ sudo systemd-tmpfiles --create /etc/tmpfiles.d/xray.conf
 
 This creates `/run/xray` for the ingest socket (`/run/xray/xray.sock`).
 
-### 2. Build or import the Xray image
+### 2. Pull (or build) the Xray image
 
-The Quadlet pins a local tag (`Pull=never`). Build from this tree:
+The Quadlet pulls from GHCR when the image is missing (`Pull=missing`):
 
 ```bash
-sudo podman build -t localhost/ethp2p/xray:728d16ac90fc -f Dockerfile .
+sudo podman pull ghcr.io/ethp2p/xray:728d16ac90fc
 ```
 
-Or import a pre-built image and tag it to match `infra/quadlet/xray.container`.
-Pinned digests and Prysm/Nethermind image builds:
+Images are published by GitHub Actions (`.github/workflows/publish-xray.yml`).
+Tags are the short git SHA (and `latest` on `main`). After the first push,
+set the GHCR package visibility to **public** under the ethp2p org packages
+settings if anonymous pulls fail.
+
+To build locally instead:
+
+```bash
+sudo podman build -t ghcr.io/ethp2p/xray:728d16ac90fc -f Dockerfile .
+```
+
+Pinned tags, Prysm publishing, and Nethermind pins:
 [`infra/README.md`](infra/README.md).
 
 Prepare the data directory expected by the unit:
@@ -108,7 +118,6 @@ sudo install -d -o 1000 -g 1000 -m 0750 /home/ubuntu/.xray/data
 
 Adjust the `Volume=` path in `infra/quadlet/xray.container` if your host
 layout differs from raptor (`/home/ubuntu/.xray/data`).
-
 ### 3. Install the Xray Quadlet
 
 ```bash
@@ -131,9 +140,12 @@ curl -fsS http://127.0.0.1:9100/api/sources
 
 ### 4. Optional: full stack (Nethermind + Prysm + Xray)
 
-Install the remaining Quadlets and the Engine JWT secret:
+Pull the instrumented Prysm image (published via
+`.github/workflows/publish-prysm.yml`), then install the remaining Quadlets
+and the Engine JWT secret:
 
 ```bash
+sudo podman pull ghcr.io/ethp2p/prysm:1fcc706ce4
 sudo podman secret create eth-jwt /path/to/jwt.hex
 sudo install -m 0644 infra/quadlet/nethermind.container \
   infra/quadlet/prysm.container /etc/containers/systemd/
