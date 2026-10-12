@@ -146,10 +146,20 @@ export class IngestSession {
           if (!this.buffer.covers(cursor)) {
             cursor = await this.resnapshot(socket);
           }
-          const data = this.buffer.get(cursor);
-          if (data) {
-            await this.write(socket, data);
-            cursor++;
+          const frames: Uint8Array[] = [];
+          let bytes = 0;
+          let next = cursor;
+          for (let count = 0; count < 256; count++) {
+            const data = this.buffer.get(next);
+            if (!data || (bytes > 0 && bytes + data.byteLength > 1024 * 1024))
+              break;
+            frames.push(data);
+            bytes += data.byteLength;
+            next++;
+          }
+          if (frames.length > 0) {
+            await this.write(socket, Buffer.concat(frames, bytes));
+            cursor = next;
           } else if (this.stopping) {
             await new Promise<void>((resolve) => socket.end(resolve));
             return;

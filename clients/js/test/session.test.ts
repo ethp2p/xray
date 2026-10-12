@@ -133,6 +133,44 @@ test("bounds replay memory and snapshots past unrecoverable gaps", async () => {
   }
 });
 
+test("preserves event bytes, order and timestamps across write batches", async () => {
+  const sink = await collector();
+  const session = new IngestSession(
+    {
+      address: sink.address,
+      peerId: Uint8Array.of(1),
+      clientName: "batch-test",
+    },
+    () => [],
+  );
+  const data = Array.from({ length: 600 }, (_, i) =>
+    new Uint8Array(i < 512 ? 1 : 64 * 1024).fill(i % 256),
+  );
+  session.start();
+  try {
+    await session.waitForAttach(AbortSignal.timeout(5000));
+    for (const [i, bytes] of data.entries())
+      session.emit(
+        { case: "streamChunk", value: { streamAlias: 1n, data: bytes } },
+        BigInt(i + 100),
+      );
+    await until(
+      () => sink.events.filter((event) => event.seq).length === data.length,
+    );
+    const events = sink.events.filter((event) => event.seq);
+    for (const [i, event] of events.entries()) {
+      assert.equal(event.seq, BigInt(i + 1));
+      assert.equal(event.observedAtNs, BigInt(i + 100));
+      assert.equal(event.payload.case, "streamChunk");
+      if (event.payload.case === "streamChunk")
+        assert.deepEqual(new Uint8Array(event.payload.value.data), data[i]);
+    }
+  } finally {
+    await session.stop();
+    await sink.close();
+  }
+});
+
 test("stop cancels attachment and reconnect work when collector is unavailable", async () => {
   const session = new IngestSession(
     {
