@@ -42,6 +42,47 @@ The captured bytes exclude transport encryption, multiplexing, and protocol
 negotiation overhead. They include both gossip and request/response streams.
 Ethereum decoding stays in the collector.
 
+## Native and evented transports
+
+`XrayStreamProbe` accepts already-negotiated application streams without a libp2p
+host. The producer supplies Unix nanosecond timestamps at the read/write boundary,
+unique connection/stream IDs, binary peer IDs, and ordered lifecycle events:
+
+```ts
+import { XrayStreamProbe } from "@xray/probe";
+
+const probe = new XrayStreamProbe({
+  address: "/tmp/xray.sock",
+  peerId: localPeerIdBytes,
+  clientName: "lodestar-z/local",
+  transport: "quic-v1",
+  security: "tls",
+  muxer: "quic-v1",
+});
+await probe.waitForAttach(AbortSignal.timeout(30_000));
+// Start the native owner only after the optional attachment barrier.
+probe.capture(nativeNetwork.drainStreamTrace());
+```
+
+Each batch contains `events` and `reset`. Events are `connection`, `stream`,
+`data`, `stream_closed`, or `connection_closed`. Announce the connection before
+its streams and the negotiated stream before its bytes. Report only bytes
+accepted by a write or returned by a read, including negotiation read-ahead once.
+A write-half close does not close the stream: its response may still be read.
+`capture()` copies data synchronously, so producers may reuse their buffers.
+The configured transport/security/muxer names apply to every connection in this
+probe; use separate probes for different transport stacks.
+
+If a bounded producer buffer loses events, discard the pending batch and set
+`reset` on the next batch. That batch must contain a complete snapshot of live
+connections and negotiated streams, without data events. It invalidates SDK
+replay and marks those streams incomplete in the collector. Resume ordinary
+events afterward. The producer owns its live-table and protocol-name bounds;
+the SDK retains only live metadata and interned protocol names, plus replay.
+
+Drain final native events after the owner stops, then call `probe.stop()`. The
+probe closes any remaining live streams/connections and attempts a bounded flush.
+
 ## Buffering and reconnects
 
 The probe owns a 16 MiB replay buffer by default (`maxBufferBytes`, minimum

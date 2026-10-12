@@ -55,9 +55,16 @@ export class IngestSession {
     this.task ??= this.run();
   }
 
-  emit(payload: Payload): void {
+  emit(payload: Payload, observedAtNs = now()): void {
     if (this.stopping) return;
-    this.buffer.append(payload, now());
+    this.buffer.append(payload, observedAtNs);
+    this.wake?.();
+  }
+
+  /** The producer lost bytes. Every writer must resnapshot before sending more. */
+  invalidate(): void {
+    this.buffer.clear();
+    this.buffer.lastSequence++;
     this.wake?.();
   }
 
@@ -183,7 +190,7 @@ export class IngestSession {
     this.report(
       new ProbeError(
         "XRAY_CAPTURE_GAP",
-        "Replay buffer exhausted; existing streams will be counted as incomplete",
+        "Capture gap; existing streams will be counted as incomplete",
       ),
     );
     await this.writeSnapshot(socket, payloads, sequence);
