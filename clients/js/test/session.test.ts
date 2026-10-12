@@ -149,18 +149,20 @@ test("preserves event bytes, order and timestamps across write batches", async (
   session.start();
   try {
     await session.waitForAttach(AbortSignal.timeout(5000));
-    for (const [i, bytes] of data.entries())
-      session.emit(
-        { case: "streamChunk", value: { streamAlias: 1n, data: bytes } },
-        BigInt(i + 100),
-      );
+    const before = BigInt(Date.now()) * 1_000_000n;
+    for (const bytes of data)
+      session.emit({
+        case: "streamChunk",
+        value: { streamAlias: 1n, data: bytes },
+      });
+    const after = BigInt(Date.now()) * 1_000_000n;
     await until(
       () => sink.events.filter((event) => event.seq).length === data.length,
     );
     const events = sink.events.filter((event) => event.seq);
     for (const [i, event] of events.entries()) {
       assert.equal(event.seq, BigInt(i + 1));
-      assert.equal(event.observedAtNs, BigInt(i + 100));
+      assert.ok(event.observedAtNs >= before && event.observedAtNs <= after);
       assert.equal(event.payload.case, "streamChunk");
       if (event.payload.case === "streamChunk")
         assert.deepEqual(new Uint8Array(event.payload.value.data), data[i]);

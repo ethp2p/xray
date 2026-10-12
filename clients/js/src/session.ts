@@ -55,16 +55,9 @@ export class IngestSession {
     this.task ??= this.run();
   }
 
-  emit(payload: Payload, observedAtNs = now()): void {
+  emit(payload: Payload): void {
     if (this.stopping) return;
-    this.buffer.append(payload, observedAtNs);
-    this.wake?.();
-  }
-
-  /** The producer lost bytes. Every writer must resnapshot before sending more. */
-  invalidate(): void {
-    this.buffer.clear();
-    this.buffer.lastSequence++;
+    this.buffer.append(payload, now());
     this.wake?.();
   }
 

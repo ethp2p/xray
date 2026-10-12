@@ -22,8 +22,6 @@ import { IngestSession, now } from "./session.js";
 import { ProbeError } from "./wire.js";
 
 export { ProbeError } from "./wire.js";
-export { XrayStreamProbe } from "./stream.js";
-export type { StreamEvent, StreamBatch, StreamProbeOptions } from "./stream.js";
 
 export interface XrayOptions {
   address: string;
