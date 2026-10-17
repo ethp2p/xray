@@ -1,0 +1,34 @@
+name: Test probes and collector
+
+on:
+  pull_request:
+    paths:
+      - "clients/js/**"
+      - "proto/**"
+      - "internal/**"
+      - "cmd/xray/**"
+      - "probe/**"
+      - "go.*"
+      - ".github/workflows/test-probe.yml"
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.13.0
+          cache: npm
+          cache-dependency-path: clients/js/package-lock.json
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.25.12
+      - run: npm ci && npm run check-types && npm test && npm run lint && npm run build
+        working-directory: clients/js
+      - run: go test ./...

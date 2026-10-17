@@ -146,9 +146,10 @@ func (l *Listener) handleConnection(conn net.Conn) {
 	lastAcked := l.processor.LastAppliedSeq(sourceID)
 
 	err = wire.WriteServerHello(conn, &xraypb.ServerHello{
-		ProtocolVersion: wire.IngestProtocolVersion,
-		SourceId:        sourceID,
-		LastAckedSeq:    lastAcked,
+		ProtocolVersion:     wire.IngestProtocolVersion,
+		SourceId:            sourceID,
+		LastAckedSeq:        lastAcked,
+		SupportsCaptureGaps: true,
 	})
 	if err != nil {
 		return

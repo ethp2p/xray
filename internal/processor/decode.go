@@ -15,8 +15,8 @@ type StreamDecoder interface {
 	Reset()
 }
 
-func newEthStreamDecoder(protocol string) StreamDecoder {
-	decoder := eth.GossipSubDecoder()
+func newEthStreamDecoder(protocol string, gloasDigests ...string) StreamDecoder {
+	decoder := eth.GossipSubDecoder(gloasDigests...)
 	if !decoder.Match(protocol) {
 		return nil
 	}

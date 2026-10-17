@@ -29,3 +29,6 @@ itest/
 
 # Agent working notes (local)
 NOTEPAD.md
+
+clients/js/node_modules/
+clients/js/dist/

@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"flag"
 	"log"
 	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -28,6 +30,7 @@ func main() {
 		dataDir        = flag.String("data-dir", defaultDataDir(), "Persistence directory for slot data")
 		retentionDays  = flag.Int("retention-days", 30, "Slot retention period in days")
 		staticDir      = flag.String("static-dir", "", "Serve dashboard static files from this directory")
+		gloasDigests   = flag.String("gloas-fork-digests", "", "Comma-separated Gloas fork digests (8 hex digits each)")
 	)
 	flag.Parse()
 
@@ -35,7 +38,17 @@ func main() {
 	defer stop()
 
 	clock := eth.NewSlotClock(time.Unix(*genesisUnix, 0), *secondsPerSlot)
-	proc := processor.NewProcessor(clock)
+	var digests []string
+	if *gloasDigests != "" {
+		for _, value := range strings.Split(*gloasDigests, ",") {
+			digest := strings.ToLower(strings.TrimPrefix(strings.TrimSpace(value), "0x"))
+			if decoded, err := hex.DecodeString(digest); err != nil || len(decoded) != 4 {
+				log.Fatalf("invalid Gloas fork digest %q", value)
+			}
+			digests = append(digests, digest)
+		}
+	}
+	proc := processor.NewProcessor(clock, digests...)
 	registry := sources.NewSourceRegistry()
 
 	store, err := storage.NewStorage(*dataDir)

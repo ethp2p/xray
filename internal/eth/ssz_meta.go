@@ -38,17 +38,34 @@ type SSZMeta struct {
 	HasCommitments   bool
 	HasTxCount       bool
 	HasSidecarIndex  bool
+	Timestamp        uint64
+	HasTimestamp     bool
 }
 
 // DecodeMeta extracts metadata fields from a decompressed SSZ payload
 // based on the normalized topic name.
 func DecodeMeta(normalizedTopic string, data []byte) SSZMeta {
+	return decodeMetaForFork(normalizedTopic, data, false)
+}
+
+func decodeMetaForFork(normalizedTopic string, data []byte, gloas bool) SSZMeta {
 	base := stripSubnetID(normalizedTopic)
 	var m SSZMeta
 
 	switch base {
 	case "beacon_block":
-		m = decodeBeaconBlockMeta(data)
+		m = decodeBeaconBlockMeta(data, gloas)
+	case "execution_payload":
+		if gloas && len(data) >= 108 {
+			messageBase := int(binary.LittleEndian.Uint32(data[:4]))
+			if messageBase >= 100 && messageBase+4 <= len(data) {
+				payloadBase := messageBase + int(binary.LittleEndian.Uint32(data[messageBase:messageBase+4]))
+				if payloadBase >= messageBase+80 && payloadBase+436 <= len(data) {
+					m.Timestamp = binary.LittleEndian.Uint64(data[payloadBase+428 : payloadBase+436])
+					m.HasTimestamp = true
+				}
+			}
+		}
 	case "blob_sidecar":
 		if len(data) >= 8 {
 			m.SidecarIndex = binary.LittleEndian.Uint64(data[0:8])
@@ -63,7 +80,7 @@ func DecodeMeta(normalizedTopic string, data []byte) SSZMeta {
 	return m
 }
 
-func decodeBeaconBlockMeta(data []byte) SSZMeta {
+func decodeBeaconBlockMeta(data []byte, gloas bool) SSZMeta {
 	var m SSZMeta
 
 	// SignedBeaconBlock: [msg_offset:4][sig:96] | BeaconBlock at offset 100
@@ -100,6 +117,11 @@ func decodeBeaconBlockMeta(data []byte) SSZMeta {
 	} else if attEnd == attStart {
 		m.AttestationCount = 0
 		m.HasAttestations = true
+	}
+	if gloas {
+		// The execution payload moved out of BeaconBlockBody. Its replacement
+		// is a signed bid; interpreting it as an ExecutionPayload fabricates counts.
+		return m
 	}
 
 	// Blob KZG commitment count: fixed-size (48 bytes each) between blob_kzg and execution_requests offsets

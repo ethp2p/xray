@@ -11,18 +11,38 @@ import (
 
 // GossipSubDecoder returns a gossipsub.Decoder configured for Ethereum networks.
 // It normalizes Ethereum topic names and decodes SSZ slot numbers from published messages.
-func GossipSubDecoder() gossipsub.Decoder {
-	return gossipsub.Decoder{MessageDecoder: decodeMessage}
+func GossipSubDecoder(gloasDigests ...string) gossipsub.Decoder {
+	const maxPayloadSize = 10 * 1024 * 1024
+	return gossipsub.Decoder{
+		MaxRPCSize: 32 + maxPayloadSize + maxPayloadSize/6 + 1024,
+		MessageDecoder: func(msg *pubsubpb.Message, tags map[string][]string) {
+			gloas := false
+			parts := strings.Split(msg.GetTopic(), "/")
+			if len(parts) >= 5 && parts[1] == "eth2" {
+				for _, digest := range gloasDigests {
+					if parts[2] == digest {
+						gloas = true
+						break
+					}
+				}
+			}
+			decodeMessageForFork(msg, tags, gloas)
+		},
+	}
 }
 
 func decodeMessage(msg *pubsubpb.Message, tags map[string][]string) {
+	decodeMessageForFork(msg, tags, false)
+}
+
+func decodeMessageForFork(msg *pubsubpb.Message, tags map[string][]string, gloas bool) {
 	if msg.Topic == nil {
 		return
 	}
 	norm := normalizeTopic(*msg.Topic)
 	tags[decode.TagTopic] = []string{norm}
 
-	slot, slotOk, meta := DecodePayload(norm, msg.Data)
+	slot, slotOk, meta := DecodePayloadForFork(norm, msg.Data, gloas)
 	if slotOk {
 		tags[decode.TagDecodedSlot] = append(tags[decode.TagDecodedSlot], strconv.FormatUint(slot, 10))
 		tags[decode.TagDecodedFrom] = []string{"gossipsub_publish"}
@@ -41,6 +61,9 @@ func decodeMessage(msg *pubsubpb.Message, tags map[string][]string) {
 	}
 	if meta.HasSidecarIndex {
 		tags[decode.TagSidecarIndex] = []string{strconv.FormatUint(meta.SidecarIndex, 10)}
+	}
+	if meta.HasTimestamp {
+		tags[decode.TagDecodedTimestamp] = []string{strconv.FormatUint(meta.Timestamp, 10)}
 	}
 }
 

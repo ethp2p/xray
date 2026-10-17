@@ -36,11 +36,15 @@ message ServerHello {
   uint32 protocol_version = 1;
   string source_id = 2;         // backend-assigned, stable across reconnects
   uint64 last_acked_seq = 3;    // highest seq the server has applied for this source; 0 = fresh attach
+  bool supports_capture_gaps = 4; // understands snapshot cursors and incomplete stream markers
 }
 
 message SnapshotStart {}
 
-message SnapshotEnd {}
+message SnapshotEnd {
+  // Snapshot state includes events through this sequence. Zero is a legacy snapshot.
+  uint64 last_included_seq = 1;
+}
 
 message StringDef {
   uint32 id = 1;
@@ -75,6 +79,8 @@ message StreamUpsert {
   Direction direction = 3;
   uint32 protocol_id = 4;
   int64 opened_at_ns = 5;
+  // The stream's framing prefix was not captured. Count raw bytes until it closes.
+  bool capture_started_midstream = 6;
 }
 
 message StreamClosed {

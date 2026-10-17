@@ -49,6 +49,12 @@ Here's an architecture diagram:
                                             └─────────────────┘
 ```
 
+## Node.js clients
+
+The [Node.js probe SDK](clients/js/README.md) instruments Lodestar through global
+libp2p stream middleware, including network worker mode. It shares the v3 ingest
+protocol with the Go/Prysm probe.
+
 ## Installation
 
 The supported install is the **full stack** on Linux: Nethermind, instrumented

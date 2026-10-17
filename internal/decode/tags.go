@@ -6,8 +6,9 @@ const (
 	TagMessageKind = "message_kind"
 	TagFraming     = "_framing"
 
-	TagDecodedSlot = "eth.payload.slot"
-	TagDecodedFrom = "eth.payload.from"
+	TagDecodedSlot      = "eth.payload.slot"
+	TagDecodedTimestamp = "eth.payload.timestamp"
+	TagDecodedFrom      = "eth.payload.from"
 
 	TagProposerIndex    = "eth.proposer_index"
 	TagAttestationCount = "eth.attestation_count"

@@ -29,8 +29,9 @@ type slotAggregate struct {
 }
 
 type streamState struct {
-	protocol string
-	decoder  StreamDecoder
+	protocol   string
+	decoder    StreamDecoder
+	incomplete bool
 }
 
 type sourceState struct {
@@ -52,18 +53,20 @@ func newSourceState() *sourceState {
 }
 
 type Processor struct {
-	mu    sync.RWMutex
-	clock eth.SlotClock
+	mu           sync.RWMutex
+	clock        eth.SlotClock
+	gloasDigests []string
 
 	sources    map[string]*sourceState
 	onUpdate   func(string, SlotSummary, uint64)
 	onFinalize func(string, SlotDetail)
 }
 
-func NewProcessor(clock eth.SlotClock) *Processor {
+func NewProcessor(clock eth.SlotClock, gloasDigests ...string) *Processor {
 	return &Processor{
-		clock:   clock,
-		sources: make(map[string]*sourceState),
+		clock:        clock,
+		gloasDigests: append([]string(nil), gloasDigests...),
+		sources:      make(map[string]*sourceState),
 	}
 }
 
@@ -84,11 +87,14 @@ func (p *Processor) ApplyForSource(sourceID string, event *xraypb.Envelope) {
 		return
 	}
 
-	switch event.Payload.(type) {
+	switch payload := event.Payload.(type) {
 	case *xraypb.Envelope_SnapshotStart:
 		p.ResetSource(sourceID)
 		return
 	case *xraypb.Envelope_SnapshotEnd:
+		p.mu.Lock()
+		p.ensureSourceLocked(sourceID).lastAppliedSeq = payload.SnapshotEnd.LastIncludedSeq
+		p.mu.Unlock()
 		return
 	}
 
@@ -286,10 +292,14 @@ func (p *Processor) handleStreamUpsert(sourceID string, stream *xraypb.StreamUps
 
 	src := p.ensureSourceLocked(sourceID)
 	protocol := src.strings[stream.ProtocolId]
-	src.streams[stream.StreamAlias] = &streamState{
-		protocol: protocol,
-		decoder:  newEthStreamDecoder(protocol),
+	state := &streamState{
+		protocol:   protocol,
+		incomplete: stream.CaptureStartedMidstream,
 	}
+	if !state.incomplete {
+		state.decoder = newEthStreamDecoder(protocol, p.gloasDigests...)
+	}
+	src.streams[stream.StreamAlias] = state
 }
 
 func (p *Processor) handleStreamClosed(sourceID string, stream *xraypb.StreamClosed) {
@@ -361,7 +371,11 @@ func (p *Processor) handleStreamChunk(sourceID string, observedAtNs int64, chunk
 	onUpdate := p.onUpdate
 
 	if state.decoder == nil {
-		addBreakdownLocked(agg, bucketOffset, chunk.Direction, uint64(len(chunk.Data)), state.protocol, "", "raw", 0)
+		kind := "raw"
+		if state.incomplete {
+			kind = "capture_incomplete"
+		}
+		addBreakdownLocked(agg, bucketOffset, chunk.Direction, uint64(len(chunk.Data)), state.protocol, "", kind, 0)
 		updatedSummary = agg.summary
 		p.mu.Unlock()
 		if finalizeDetail != nil && onFinalize != nil {
@@ -378,7 +392,15 @@ func (p *Processor) handleStreamChunk(sourceID string, observedAtNs int64, chunk
 		msgKind := tagValue(tags, tagMessageKind)
 
 		bleedDistance := 0
-		if v := tagValue(tags, decode.TagDecodedSlot); v != "" {
+		slotValue := tagValue(tags, decode.TagDecodedSlot)
+		if slotValue == "" {
+			if timestamp, err := strconv.ParseInt(tagValue(tags, decode.TagDecodedTimestamp), 10, 64); err == nil {
+				if payloadRef, ok := p.clock.At(time.Unix(timestamp, 0)); ok {
+					slotValue = strconv.FormatUint(payloadRef.Slot, 10)
+				}
+			}
+		}
+		if v := slotValue; v != "" {
 			if payloadSlot, err := strconv.ParseUint(v, 10, 64); err == nil {
 				if payloadSlot < ref.Slot {
 					bleedDistance = int(ref.Slot - payloadSlot)
