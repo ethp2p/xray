@@ -79,8 +79,8 @@ func DecodeSlot(normalizedTopic string, compressedData []byte) (uint64, bool) {
 }
 
 // DecodePayload decompresses a gossip payload once and extracts both
-// the slot number and SSZ metadata. Results are cached by content hash
-// to avoid re-decompressing the same payload from multiple peers.
+// the slot number and SSZ metadata. Results are cached by topic, fork, and
+// content hash to avoid re-decompressing the same payload from multiple peers.
 func DecodePayload(normalizedTopic string, compressedData []byte) (slot uint64, slotOk bool, meta SSZMeta) {
 	return DecodePayloadForFork(normalizedTopic, compressedData, false)
 }

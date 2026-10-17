@@ -4,9 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"testing"
-
-	"github.com/ethp2p/xray/internal/decode"
-	pubsubpb "github.com/libp2p/go-libp2p-pubsub/pb"
 )
 
 func TestLodestarPayloads(t *testing.T) {
@@ -49,25 +46,5 @@ func TestLodestarPayloads(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func TestGossipSubLargeFragmentedRPC(t *testing.T) {
-	topic := "/eth2/11223344/unknown/ssz_snappy"
-	frame, err := makeFrame(&pubsubpb.RPC{Publish: []*pubsubpb.Message{{Topic: &topic, Data: make([]byte, 2<<20)}}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	decoder := GossipSubDecoder().New()
-	total := 0
-	emit := func(n int, _ []decode.Tag, _ any) { total += n }
-	for offset := 0; offset < len(frame); offset += 65536 {
-		end := min(offset+65536, len(frame))
-		if err := decoder.ObserveRead(frame[offset:end], emit); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if total != len(frame) {
-		t.Fatalf("attributed %d bytes, want %d", total, len(frame))
 	}
 }

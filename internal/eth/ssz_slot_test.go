@@ -146,32 +146,68 @@ func TestStripSubnetID(t *testing.T) {
 	}
 }
 
-func TestPayloadCacheSeparatesTopicsAndForks(t *testing.T) {
+func TestDecodeSlot_SingleAttestation(t *testing.T) {
 	data := make([]byte, 240)
-	putSlotAt(data, 0, 7)
+	putSlotAt(data, 0, 3)
+	putSlotAt(data, 8, 123)
 	putSlotAt(data, 16, 42)
+	compressAndDecode(t, "beacon_attestation_5", data, 42)
+}
+
+func TestPayloadCacheSeparatesTopics(t *testing.T) {
+	data := make([]byte, 200)
+	putSlotAt(data, 0, 7)
+	putSlotAt(data, 20, 42)
 	compressed := snappy.Encode(nil, data)
 	for _, tc := range []struct {
 		topic string
-		gloas bool
 		slot  uint64
 	}{
-		{"sync_committee_1", false, 7},
-		{"data_column_sidecar_1", false, 0},
-		{"data_column_sidecar_1", true, 42},
-		{"beacon_attestation_1", false, 42},
+		{"sync_committee_1", 7},
+		{"data_column_sidecar_1", 42},
+		{"sync_committee_1", 7},
 	} {
-		slot, ok, _ := DecodePayloadForFork(tc.topic, compressed, tc.gloas)
+		slot, ok, _ := DecodePayload(tc.topic, compressed)
 		if !ok || slot != tc.slot {
-			t.Fatalf("topic=%s gloas=%v: slot=(%d,%v), want %d", tc.topic, tc.gloas, slot, ok, tc.slot)
+			t.Fatalf("topic=%s: slot=(%d,%v), want %d", tc.topic, slot, ok, tc.slot)
 		}
 	}
 }
 
-func TestDecodePayloadRejectsOversizedSnappyLength(t *testing.T) {
-	compressed := binary.AppendUvarint(nil, 10*1024*1024+1)
-	slot, ok, meta := DecodePayloadForFork("beacon_block", compressed, true)
+func TestDecodePayloadRejectsOversizedSnappyPayload(t *testing.T) {
+	data := make([]byte, 10*1024*1024+1)
+	putSlotAt(data, 100, 42)
+	compressed := snappy.Encode(nil, data)
+	slot, ok, meta := DecodePayload("beacon_block", compressed)
 	if ok || slot != 0 || meta != (SSZMeta{}) {
 		t.Fatalf("oversized payload decoded: slot=(%d,%v), meta=%+v", slot, ok, meta)
+	}
+}
+
+func TestDecodeSlotRejectsOversizedSnappyPayload(t *testing.T) {
+	data := make([]byte, 10*1024*1024+1)
+	putSlotAt(data, 100, 43)
+	slot, ok := DecodeSlot("beacon_block", snappy.Encode(nil, data))
+	if ok || slot != 0 {
+		t.Fatalf("oversized payload decoded: slot=(%d,%v)", slot, ok)
+	}
+}
+
+func TestPayloadCacheSeparatesForks(t *testing.T) {
+	data := make([]byte, 240)
+	putSlotAt(data, 16, 42)
+	compressed := snappy.Encode(nil, data)
+	for _, tc := range []struct {
+		gloas bool
+		slot  uint64
+	}{
+		{false, 0},
+		{true, 42},
+		{false, 0},
+	} {
+		slot, ok, _ := DecodePayloadForFork("data_column_sidecar_1", compressed, tc.gloas)
+		if !ok || slot != tc.slot {
+			t.Fatalf("gloas=%v: slot=(%d,%v), want %d", tc.gloas, slot, ok, tc.slot)
+		}
 	}
 }
