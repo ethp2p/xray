@@ -33,11 +33,13 @@ export interface XrayOptions {
 
 type Node = Pick<
   Libp2p,
-  "peerId" | "getConnections" | "addEventListener" | "removeEventListener"
-> & {
-  use(middleware: StreamMiddleware): void;
-  unuse(middleware: StreamMiddleware): void;
-};
+  | "peerId"
+  | "getConnections"
+  | "addEventListener"
+  | "removeEventListener"
+  | "use"
+  | "unuse"
+>;
 type PeerState = { upsert: PeerUpsert; connections: number };
 type ConnectionState = { upsert: ConnectionUpsert; peer: string };
 type StreamState = {

@@ -1,9 +1,9 @@
 # Node.js probe
 
 `@xray/probe` captures negotiated libp2p application streams and sends Xray v3
-envelopes to a local collector. It requires Node.js 22 or later and the accompanying
-js-libp2p middleware extension: global `use(middleware)` and `unuse(middleware)`
-overloads, with isolated middleware arrays for each stream. Existing
+envelopes to a local collector. It requires Node.js 22 or later, `libp2p >=3.4.0`
+and `@libp2p/interface ^3.4.0`. These releases include global `use(middleware)`
+and `unuse(middleware)` overloads with isolated middleware arrays for each stream. Existing
 `use(protocol, middleware)` calls still replace that protocol's middleware;
 protocol strings, including `"*"`, are matched literally.
 
@@ -83,8 +83,8 @@ bindings from the repository root with `buf generate` and protoc-gen-go v1.36.9.
 Generated files are checked in so consumers do not need code generators.
 
 The package is currently consumed by Lodestar as a locally packed archive.
-Publish the SDK and merge/release the libp2p changes before replacing that archive
-with registry dependencies in an upstream Lodestar PR.
+The libp2p middleware support is released. Publish the SDK before replacing that
+archive with a registry dependency in the upstream Lodestar PR.
 
 ## Ethereum forks
 
