@@ -37,12 +37,14 @@ func TestDecodeSlot_AggregateAndProof(t *testing.T) {
 
 func TestDecodeSlot_Attestation(t *testing.T) {
 	data := make([]byte, 240)
+	binary.LittleEndian.PutUint32(data, 228)
 	putSlotAt(data, 4, 99)
 	compressAndDecode(t, "beacon_attestation_5", data, 99)
 }
 
 func TestDecodeSlot_AttestationSubnet0(t *testing.T) {
 	data := make([]byte, 240)
+	binary.LittleEndian.PutUint32(data, 228)
 	putSlotAt(data, 4, 101)
 	compressAndDecode(t, "beacon_attestation_0", data, 101)
 }
@@ -141,5 +143,52 @@ func TestStripSubnetID(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("stripSubnetID(%q) = %q, want %q", tt.input, got, tt.want)
 		}
+	}
+}
+
+func TestDecodeSlot_SingleAttestation(t *testing.T) {
+	data := make([]byte, 240)
+	putSlotAt(data, 0, 3)
+	putSlotAt(data, 8, 123)
+	putSlotAt(data, 16, 42)
+	compressAndDecode(t, "beacon_attestation_5", data, 42)
+}
+
+func TestPayloadCacheSeparatesTopics(t *testing.T) {
+	data := make([]byte, 200)
+	putSlotAt(data, 0, 7)
+	putSlotAt(data, 20, 42)
+	compressed := snappy.Encode(nil, data)
+	for _, tc := range []struct {
+		topic string
+		slot  uint64
+	}{
+		{"sync_committee_1", 7},
+		{"data_column_sidecar_1", 42},
+		{"sync_committee_1", 7},
+	} {
+		slot, ok, _ := DecodePayload(tc.topic, compressed)
+		if !ok || slot != tc.slot {
+			t.Fatalf("topic=%s: slot=(%d,%v), want %d", tc.topic, slot, ok, tc.slot)
+		}
+	}
+}
+
+func TestDecodePayloadRejectsOversizedSnappyPayload(t *testing.T) {
+	data := make([]byte, 10*1024*1024+1)
+	putSlotAt(data, 100, 42)
+	compressed := snappy.Encode(nil, data)
+	slot, ok, meta := DecodePayload("beacon_block", compressed)
+	if ok || slot != 0 || meta != (SSZMeta{}) {
+		t.Fatalf("oversized payload decoded: slot=(%d,%v), meta=%+v", slot, ok, meta)
+	}
+}
+
+func TestDecodeSlotRejectsOversizedSnappyPayload(t *testing.T) {
+	data := make([]byte, 10*1024*1024+1)
+	putSlotAt(data, 100, 43)
+	slot, ok := DecodeSlot("beacon_block", snappy.Encode(nil, data))
+	if ok || slot != 0 {
+		t.Fatalf("oversized payload decoded: slot=(%d,%v)", slot, ok)
 	}
 }

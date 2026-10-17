@@ -118,7 +118,7 @@ type FlowTimePoint = {
 // Normalize raw topic paths from the API into human-readable names.
 // e.g. "/eth2/8c9f62fe/beacon_attestation_15/ssz_snappy" -> "beacon_attestation_15"
 //      "/eth2/beacon_chain/req/status/2/ssz_snappy" -> "status"
-//      "/meshsub/1.2.0" -> "meshsub"
+//      "/meshsub/1.2.0" -> "meshsub/1.2.0"
 function normalizeTopic(raw: string): string {
   let t = raw;
   // Strip /eth2/{hash}/ prefix (gossipsub topics)
@@ -151,6 +151,11 @@ function groupTopic(raw: string): string {
     if (re.test(t)) return group;
   }
   return t;
+}
+
+function undecodedFlow(row: ApiBucketBreakdown): string | undefined {
+  if (row.message_kind === "decode_error") return "decode error";
+  return undefined;
 }
 
 type FlowChild = {
@@ -200,6 +205,7 @@ function deriveProtocols(breakdown: ApiBucketBreakdown[]): ProtocolRow[] {
   const byProto = new Map<string, ProtocolRow>();
   for (const row of breakdown) {
     if (row.bytes_in === 0 && row.bytes_out === 0) continue;
+    if (undecodedFlow(row)) continue;
     // Only capture gossipsub protocol overhead (topic-less framing + control)
     if (row.topic !== "" && row.topic !== undefined) continue;
     if (!isGossipProtocol(row.protocol)) continue;
@@ -233,12 +239,13 @@ function deriveFlows(breakdown: ApiBucketBreakdown[]): FlowRow[] {
 
   for (const row of breakdown) {
     if (row.bytes_in === 0 && row.bytes_out === 0) continue;
+    const undecoded = undecodedFlow(row);
     // Skip gossipsub overhead (goes to deriveProtocols)
-    if (!row.topic && isGossipProtocol(row.protocol)) continue;
+    if (!undecoded && !row.topic && isGossipProtocol(row.protocol)) continue;
     // Use normalized protocol name as flow for topic-less req/resp RPCs
     const source = row.topic || row.protocol;
-    const flow = groupTopic(source);
-    const rawTopic = normalizeTopic(source);
+    const flow = undecoded ?? groupTopic(source);
+    const rawTopic = undecoded ?? normalizeTopic(source);
 
     // Update flow aggregate
     let entry = byFlow.get(flow);
@@ -334,7 +341,7 @@ function deriveFlowTimeSeries(buckets: ApiSlotBucketPoint[]): FlowTimePoint[] {
     const flows: Record<string, { in: number; out: number; bleedIn: number; bleedOut: number; bleedByDist: BleedDistData }> = {};
     if (b) {
       for (const row of b.breakdown ?? []) {
-        const flow = groupTopic(row.topic || row.protocol);
+        const flow = undecodedFlow(row) ?? groupTopic(row.topic || row.protocol);
         if (!flows[flow]) flows[flow] = { in: 0, out: 0, bleedIn: 0, bleedOut: 0, bleedByDist: {} };
         flows[flow].in += row.bytes_in;
         flows[flow].out += row.bytes_out;
