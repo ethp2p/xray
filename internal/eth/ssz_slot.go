@@ -21,8 +21,13 @@ const decodeCacheMax = 256
 
 var (
 	decodeCacheMu sync.Mutex
-	decodeCache   = make(map[uint64]cachedPayload, decodeCacheMax)
+	decodeCache   = make(map[payloadCacheKey]cachedPayload, decodeCacheMax)
 )
+
+type payloadCacheKey struct {
+	topic string
+	hash  uint64
+}
 
 // payloadKey computes a fast fingerprint from the compressed data.
 // Same content from different peers produces identical Snappy output.
@@ -68,29 +73,15 @@ var subnetPrefixes = []string{
 // "beacon_block", "beacon_attestation_3"). Returns (0, false) when the
 // topic is unknown or the payload is too short.
 func DecodeSlot(normalizedTopic string, compressedData []byte) (uint64, bool) {
-	base := stripSubnetID(normalizedTopic)
-	offset, ok := topicSlotOffset[base]
-	if !ok {
-		return 0, false
-	}
-
-	data, err := snappy.Decode(nil, compressedData)
-	if err != nil {
-		data = compressedData
-	}
-
-	end := offset + 8
-	if len(data) < end {
-		return 0, false
-	}
-	return binary.LittleEndian.Uint64(data[offset:end]), true
+	slot, ok, _ := DecodePayload(normalizedTopic, compressedData)
+	return slot, ok
 }
 
 // DecodePayload decompresses a gossip payload once and extracts both
-// the slot number and SSZ metadata. Results are cached by content hash
-// to avoid re-decompressing the same payload from multiple peers.
+// the slot number and SSZ metadata. Results are cached by topic and content
+// hash to avoid re-decompressing the same payload from multiple peers.
 func DecodePayload(normalizedTopic string, compressedData []byte) (slot uint64, slotOk bool, meta SSZMeta) {
-	key := payloadKey(compressedData)
+	key := payloadCacheKey{normalizedTopic, payloadKey(compressedData)}
 
 	decodeCacheMu.Lock()
 	if cached, ok := decodeCache[key]; ok {
@@ -99,6 +90,9 @@ func DecodePayload(normalizedTopic string, compressedData []byte) (slot uint64, 
 	}
 	decodeCacheMu.Unlock()
 
+	if size, err := snappy.DecodedLen(compressedData); err == nil && size > 10*1024*1024 {
+		return
+	}
 	data, err := snappy.Decode(nil, compressedData)
 	if err != nil {
 		data = compressedData
@@ -106,6 +100,11 @@ func DecodePayload(normalizedTopic string, compressedData []byte) (slot uint64, 
 
 	base := stripSubnetID(normalizedTopic)
 	offset, ok := topicSlotOffset[base]
+	// SingleAttestation is fixed-size. Legacy Attestation starts with its
+	// aggregation_bits offset (228), including when its total size is 240.
+	if base == "beacon_attestation" && len(data) == 240 && binary.LittleEndian.Uint32(data[:4]) != 228 {
+		offset, ok = 16, true
+	}
 	if ok {
 		end := offset + 8
 		if len(data) >= end {
@@ -119,7 +118,7 @@ func DecodePayload(normalizedTopic string, compressedData []byte) (slot uint64, 
 	decodeCacheMu.Lock()
 	if len(decodeCache) >= decodeCacheMax {
 		// Evict all on overflow (simple, infrequent)
-		decodeCache = make(map[uint64]cachedPayload, decodeCacheMax)
+		decodeCache = make(map[payloadCacheKey]cachedPayload, decodeCacheMax)
 	}
 	decodeCache[key] = cachedPayload{slot: slot, slotOk: slotOk, meta: meta}
 	decodeCacheMu.Unlock()

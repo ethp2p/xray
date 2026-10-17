@@ -12,7 +12,11 @@ import (
 // GossipSubDecoder returns a gossipsub.Decoder configured for Ethereum networks.
 // It normalizes Ethereum topic names and decodes SSZ slot numbers from published messages.
 func GossipSubDecoder() gossipsub.Decoder {
-	return gossipsub.Decoder{MessageDecoder: decodeMessage}
+	const maxPayloadSize = 10 * 1024 * 1024
+	return gossipsub.Decoder{
+		MaxRPCSize:     32 + maxPayloadSize + maxPayloadSize/6 + 1024,
+		MessageDecoder: decodeMessage,
+	}
 }
 
 func decodeMessage(msg *pubsubpb.Message, tags map[string][]string) {
